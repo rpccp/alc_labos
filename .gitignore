@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Configuraciones personales
+.vscode/
+
+# Archivos temporales
+tmp/
+temp/
+
+# Archivos auxiliares de latex
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
