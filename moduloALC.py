@@ -115,6 +115,65 @@ def trans_afin(v, theta, s, b):
     return w_hom[:2]
 
 
+################ LABO 3 #################
+
+def norma(x: np.ndarray, p: int | str) -> float:
+    if p == 1:
+        return sum([abs(n) for n in x])
+
+    elif p == "inf":
+        max = 0
+        for n in x:
+            if abs(n) > max:
+                max = abs(n)
+        return max
+
+    suma = sum([n**p for n in x])
+    return np.power(suma, 1 / p)
+
+def normaliza(X: list[np.ndarray], p: int) -> list[np.ndarray]:
+    return [x / norma(x, p) for x in X]
+
+# def normaMatMC(A, q, p, Np):
+#     """
+#     Devuelve la norma A-{q,p} y el vector x en el cual se alcanza
+#     el maximo.
+#     """
+#     vectoresAlAzar = np.random.rand(Np, A.shape[1])
+#     vectoresNormalizados = normaliza(vectoresAlAzar, p)
+#     vectorConNorma = map(lambda x: [norma(A@x, q), x], vectoresNormalizados)
+#     return max(vectorConNorma, key=lambda p: p[0])
+
+def normaExacta(A: np.ndarray, p = [1, "inf"]):
+    def normaM(A: np.ndarray, p: int | str) -> float:
+        if p == "inf":
+            sumas_inf = np.zeros(A.shape[0]) 
+            for i in range(0, A.shape[0]):
+                for j in range(0, A.shape[1]):
+                    sumas_inf[i] += abs(A[i][j])
+            return max(sumas_inf)
+
+        if p == 1:
+            sumas_1 = np.zeros(A.shape[1]) 
+            for j in range(0, A.shape[1]):
+                for i in range(0, A.shape[0]):
+                    sumas_1[j] += abs(A[i][j])
+            return max(sumas_1)
+        
+    if p == "inf": return normaM(A, "inf")
+    
+    if isinstance(p, int): return normaM(A, p)
+    
+    if p == [1, "inf"]: return [normaM(A, 1), normaM(A, "inf")]
+
+    return None
+
+def condMC(A: np.ndarray, p: int) -> float:
+    ...
+
+def condExacto(A: np.ndarray, p: int) -> float:
+    ...
+
 ################# LABO 4 #################
 
 def calculaLU(A):
@@ -302,3 +361,310 @@ def calculaCholesky(A, atol=1e-10):
     return R
 
 
+################# LABO 5 #################
+
+def GS(A, tol, retorna_nops):
+
+    Q = np.zeros(A.shape)
+    R = np.zeros(A.shape)
+
+    n = len(A)
+
+    r = 0
+    norma_a0 = norma(A[:, 0])
+    if norma_a0 > tol:
+        Q[:, 0] = A[:, 0] / norma_a0
+        R[0, 0] = norma_a0
+        nops = 2 + (n + (n- 1) + 1)
+        r += 1
+
+    for j in range(1, n):
+        q_j_moño = A[:, j].copy()
+
+        for k in range(0, j):
+            R[k, j] = Q[:, k].T @ q_j_moño
+            q_j_moño = q_j_moño - R[k, j] * Q[:, k]
+            nops += (2 * n - 1) + 2
+
+        norma_qj_moño = norma(q_j_moño)
+
+        if norma_qj_moño > tol:
+            R[r, j] = norma_qj_moño
+            Q[:, r] = q_j_moño / R[r, j]
+            nops += 2 + (n + (n- 1) + 1) + n
+            r += 1
+
+    Q_final = Q[:, :r]
+    R_final = R[:r, :]
+
+    if retorna_nops:
+        return Q, R, nops
+
+    return Q, R
+
+### Funciones L05-QR
+def QR_con_GS(A, tol = 1e-12, retorna_nops = False):
+    """
+    A una matriz de n x n 
+    tol la tolerancia con la que se filtran elementos nulos en R
+    retorna_nops permite (opcionalmente) retornar el numero de operaciones realizado
+    retorna matrices Q y R calculadas con Gram Schmidt (y como tercer argumento opcional, el numero de operaciones).
+    Si la matriz A no es de n x n, debe retornar None
+    """
+    if A is None: return None
+    if len(A) != len(A[0]): return None
+
+    return GS(A, tol, retorna_nops)
+
+def QR_con_HH(A,tol=1e-12,extras=False):
+    """
+    A una matriz de m x n (m>=n)
+    tol la tolerancia con la que se filtran elementos nulos en R
+    retorna matrices Q y R calculadas con reflexiones de Householder
+    Si la matriz A no cumple m>=n, debe retornar None
+    extras : bool, opcional
+        Si es True, devuelve informacion extra sobre el proceso de factorizacion.
+        Por defecto es False. Esto lo hacemos para poder graficar el proceso.
+    Devuelve la factorizacion QR de A usando reflectores de Householder.
+    Devuelve: 
+        Q, R, extra_info (si extras es True)
+        Q, R (si extras es False)
+    extra_info es un diccionario con la clave:
+        'R_matrices': lista de las matrices R en cada paso
+        'Q_matrices': lista de las matrices Q en cada paso
+    """
+    raise NotImplemented("")
+
+def calculaQR(A,metodo='RH',tol=1e-12):
+    """
+    A una matriz de n x n 
+    tol la tolerancia con la que se filtran elementos nulos en R    
+    metodo = ['RH','GS'] usa reflectores de Householder (RH) o Gram Schmidt (GS) para realizar la factorizacion
+    retorna matrices Q y R calculadas con Gram Schmidt (y como tercer argumento opcional, el numero de operaciones)
+    Si el metodo no esta entre las opciones, retorna None
+    """
+    raise NotImplemented("")
+
+################# LABO 6 #################
+
+def multMat(A, B):
+    filasA = A.shape[0]
+    columnasB = B.shape[1]
+    columnasA = A.shape[1]
+    AB = np.zeros((filasA, columnasB))
+    
+    for i in range(filasA):
+        for j in range(columnasB):
+            for k in range(columnasA):
+                AB[i, j] += A[i, k] * B[k, j]
+                
+    return AB
+
+def metpot2k(A, tol = 1e-15, K = 1000):
+
+    def f(A, v):
+        res = multMat(A, v)
+        return res / norma(res, 2)
+
+    n = len(A)
+
+    v = np.random.rand(n, 1)
+    v_moño = f(A, f(A, v))
+
+    e = multMat(v_moño.T, v)
+
+    k = 0
+    while (np.abs(e - 1) > tol) and (k < K):
+        v = v_moño
+        v_moño = f(A, f(A, v))
+        e = multMat(v_moño.T, v)
+        k += 1
+
+    autovalor = multMat(v_moño.T, multMat(A, v_moño))
+    
+    return (v_moño, autovalor[0][0], k)
+
+def diagRH(A, tol = 1e-15, K = 1000):
+
+    n = len(A)
+    if n == 1:
+        return np.eye(1), A
+
+    v_1, lambda_1, _ = metpot2k(A, tol, K)
+
+    I = np.eye(n, n)
+    e_1 = I[:, [0]]
+    u = e_1 - v_1
+    norma_u = norma(u, 2) ** 2
+
+    if norma_u > tol:
+        proyeccion = multMat(u, u.T)
+        H_v_1 = I - 2 * (proyeccion / norma_u)
+    else:
+        H_v_1 = I
+
+    B = multMat(H_v_1, multMat(A, H_v_1.T))
+    A_moño = B[1:, 1:]
+    
+    S_moño, D_moño = diagRH(A_moño, tol, K)
+
+    D = np.zeros((n, n))
+    D[0, 0] = lambda_1
+    D[1:, 1:] = D_moño
+
+    S = np.eye(n)
+    S[1:, 1:] = S_moño
+    S = multMat(H_v_1, S)
+
+    return (S, D)
+
+
+################# LABO 7 #################
+def matriz(n):
+    if n == 1:
+        return np.array([[1]])
+
+    T = np.random.rand(n, n)
+
+    return T
+
+def normalizarFilas(T):
+    for i in range(0, len(T)):
+        T[i] = T[i] / np.sum(T[i])
+
+    return T
+
+def transiciones_al_azar_continuas(n):
+    """
+    n la cantidad de filas (columnas) de la matriz de transición.
+    Retorna matriz T de n x n normalizada por columnas, y con entradas al azar en el intervalo [0,1]
+    """
+
+    T = matriz(n)
+
+    T = normalizarFilas(T)
+
+    return T.T
+
+def transiciones_al_azar_uniformes(n, thres):
+    """
+    n la cantidad de filas (columnas) de la matriz de transición.
+    thres probabilidad de que una entrada sea distinta de cero.
+    Retorna matriz T de n x n normalizada por columnas. 
+    El elemento i,j es distinto de cero si el número generado al azar para i,j es menor o igual a thres. 
+    Todos los elementos de la columna $j$ son iguales 
+    (a 1 sobre el número de elementos distintos de cero en la columna).
+    """
+
+    T = matriz(n)
+
+    for i in range(0, n):
+        for j in range(0, n):
+            if T[i, j] < thres:
+                T[i, j] = 0
+            else:
+                T[i, j] = 1
+
+    T = normalizarFilas(T)
+
+    return T.T
+
+def nucleo(A,tol=1e-15):
+    """
+    A una matriz de m x n
+    tol la tolerancia para asumir que un vector esta en el nucleo.
+    Calcula el nucleo de la matriz A diagonalizando la matriz traspuesta(A) * A (* la multiplicacion matricial), usando el medodo diagRH. El nucleo corresponde a los autovectores de autovalor con modulo <= tol.
+    Retorna los autovectores en cuestion, como una matriz de n x k, con k el numero de autovectores en el nucleo.
+    """
+
+    # Sabemos que A^t * A tiene el mismo nucleo que A. A^t * A es simetrica 
+    # entonces podemos usar diagRH
+    AtA = multMat(A.T, A)
+
+    # Ahora la diagonalizamos
+    S, D = diagRH(AtA, tol)
+
+    nucleo = []
+
+    for j in range(0, len(D)):
+        if np.abs(D[j, j]) < tol:
+            nucleo.append(S[:, j])
+
+    return np.array(nucleo).T
+    
+def crea_rala(listado, m_filas, n_columnas, tol=1e-15):
+    """
+    Recibe una lista listado, con tres elementos: lista con indices i, lista con indices j, y lista con valores A_ij de la matriz A. 
+    Tambien las dimensiones de la matriz a traves de m_filas y n_columnas. Los elementos menores a tol se descartan.
+    Idealmente, el listado debe incluir unicamente posiciones correspondientes a valores distintos de cero. Retorna una lista con:
+    - Diccionario {(i,j):A_ij} que representa los elementos no nulos de la matriz A. 
+      Los elementos con modulo menor a tol deben descartarse por default. 
+    - Tupla (m_filas,n_columnas) que permita conocer las dimensiones de la matriz.
+    """
+
+    rala = dict()
+
+    if listado == []:
+        return [rala, (m_filas, n_columnas)]
+
+    for i in range(0, len(listado[0])):
+        if not np.abs(listado[2][i]) < tol:
+            rala[(listado[0][i], listado[1][i])] = listado[2][i]
+
+    return [rala, (m_filas, n_columnas)]
+
+def multiplica_rala_vector(A, v):
+    """
+    Recibe una matriz rala creada con crea_rala y un vector v. 
+    Retorna un vector w resultado de multiplicar A con v
+    """
+    w = np.zeros(shape = len(v))
+    R = A[0]
+
+    for (i, j) in R:
+        w[i] += v[j] * R[(i, j)]
+
+    return np.array([w])   
+
+
+################# LABO 8 #################
+
+def svd_reducida(A,k="max",tol=1e-15):
+    """
+    A la matriz de interes (de m x n)
+    k el numero de valores singulares (y vectores) a retener.
+    tol la tolerancia para considerar un valor singular igual a cero
+    Retorna hatU (matriz de m x k), hatSig (vector de k valores singulares) y hatV (matriz de n x k)
+    """
+
+    m, n = np.shape(A)
+
+    if m < n:
+            U, Sigma2 = diagRH(multMat(A, A.T), tol)
+            V = multMat(U.T, A).T
+    else:
+        V, Sigma2 = diagRH(multMat(A.T, A), tol)
+        U = multMat(A, V)
+
+    Sigma = []
+    for i in range(min(n, m)):
+        if np.abs(Sigma2[i, i]) > tol:
+            Sigma.append(np.sqrt(Sigma2[i, i]))
+
+    r = len(Sigma)
+
+    if isinstance(k, int):
+        r = min(r, k)
+        Sigma = Sigma[:r]
+
+    U = U[:, :r]
+    V = V[:, :r]
+
+    if m < n:
+        for j in range(r):
+            V[:, j] /= norma(V[:, j], 2)
+    else:
+        for j in range(r):
+            U[:, j] /= norma(U[:, j], 2)
+
+    return (U, Sigma, V)
