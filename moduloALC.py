@@ -476,148 +476,126 @@ def condExacta(A, p=[1, 'inf']):
 
 
 def calculaLU(A):
-    """Calcula la factorización LU de A sin pivoteo.
+    """Calcula la factorización LU de una matriz sin pivoteo.
 
     Parámetros:
         A: matriz cuadrada a factorizar.
     Retorna:
-        La tupla (L, U, nops), con L triangular inferior, U triangular superior
-        y la cantidad de operaciones; si la entrada no es válida o no se puede
-        factorizar, retorna (None, None, 0).
+        Las matrices L y U y la cantidad de operaciones realizadas. Retorna
+        (None, None, 0) si A no es cuadrada o se necesita dividir por un pivote
+        nulo. No realiza intercambios de filas.
     """
     if A is None:
         return None, None, 0
 
-    try:
-        U = np.array(A, dtype=float)
-    except:
+    n = A.shape[0]
+
+    if A.shape[1] != n:
         return None, None, 0
 
-    # TODO: NO PERMITIDO: np.ndim no figura entre las funciones habilitadas.
-    if np.ndim(U) != 2 or U.shape[0] != U.shape[1]:
-        return None, None, 0
-
-    n = U.shape[0]
+    A_copia = copiar_matriz(A)
     L = np.eye(n)
-    nops = 0
+    cant_op = 0
 
     for i in range(n - 1):
-        pivot = U[i, i]
+        pivot = A_copia[i, i]
 
         if pivot == 0:
             return None, None, 0
 
         for j in range(i + 1, n):
-            coef = U[j, i] / pivot
-            nops += 1
+            coef = A_copia[j, i] / pivot
+            cant_op += 1
 
             L[j, i] = coef
-            U[j, i] = 0
+            A_copia[j, i] = 0
 
-            U[j, i + 1:] = U[j, i + 1:] - coef * U[i, i + 1:]
+            for k in range(i + 1, n):
+                A_copia[j, k] = A_copia[j, k] - coef * A_copia[i, k]
+                cant_op += 2
 
-            nops += 2 * (n - i - 1)
+    U = A_copia
+    return L, U, cant_op
 
-    return L, U, nops
 
+def res_tri(L, b, inferior=True):
+    """Resuelve un sistema triangular mediante sustitución.
 
-def res_tri(A, b, inferior=True):
+    Parámetros:
+        L: matriz triangular con diagonal no nula.
+        b: vector del lado derecho, compatible con L.
+        inferior: indica si L es triangular inferior. Si no, se considera
+            triangular superior.
+    Retorna:
+        El vector x que resuelve Lx = b.
     """
-    Resuelve Ax = b cuando A es triangular inferior o superior.
-    Retorna None si las dimensiones no son compatibles o A es singular.
-    """
-    try:
-        T = np.array(A, dtype=float)
-        termino_independiente = np.array(b, dtype=float)
-    except:
-        return None
-
-    # TODO: NO PERMITIDO: np.ndim no figura entre las funciones habilitadas.
-    if np.ndim(T) != 2 or T.shape[0] != T.shape[1]:
-        return None
-    # TODO: NO PERMITIDO: np.ndim no figura entre las funciones habilitadas.
-    if np.ndim(termino_independiente) != 1:
-        return None
-
-    n = T.shape[0]
-    if termino_independiente.shape[0] != n:
-        return None
-
-    x = np.zeros(n)
+    n = L.shape[0]
+    X = np.zeros(len(b))
 
     if inferior:
         for i in range(n):
-            if T[i, i] == 0:
-                return None
-
-            suma = 0.0
+            X[i] = b[i]
             for j in range(i):
-                suma += T[i, j] * x[j]
-            x[i] = (termino_independiente[i] - suma) / T[i, i]
-    else:
-        for i in range(n - 1, -1, -1):
-            if T[i, i] == 0:
-                return None
+                X[i] -= L[i, j] * X[j]
+            X[i] /= L[i, i]
+        return X
 
-            suma = 0.0
-            for j in range(i + 1, n):
-                suma += T[i, j] * x[j]
-            x[i] = (termino_independiente[i] - suma) / T[i, i]
+    for i in range(n - 1, -1, -1):
+        X[i] = b[i]
+        for j in range(i + 1, n):
+            X[i] -= L[i, j] * X[j]
+        X[i] /= L[i, i]
 
-    return x
+    return X
 
 
 def calculaLDV(A):
-    """
-    Calcula A = LDV a partir de la factorizacion LU de A.
+    """Calcula la factorización A = L D V a partir de la factorización LU.
+
+    Parámetros:
+        A: matriz cuadrada a factorizar.
+    Retorna:
+        Las matrices L, D y V, o None si no se puede calcular la factorización.
     """
     L, U, _ = calculaLU(A)
 
     if L is None or U is None:
         return None
 
-    n = U.shape[0]
-    D = np.zeros((n, n))
-    V = np.zeros((n, n))
+    L2, D, _ = calculaLU(U.T)
+    if L2 is None or D is None:
+        return None
 
-    for i in range(n):
-        diagonal = U[i, i]
-        if diagonal == 0:
-            return None
-
-        D[i, i] = diagonal
-        V[i, i:] = U[i, i:] / diagonal
-
-    return L, D, V
+    return L, D, L2.T
 
 
-def esSDP(A, atol=1e-10):
+def esSDP(A, atol=1e-8):
+    """Determina si una matriz es simétrica definida positiva.
+
+    Parámetros:
+        A: matriz cuadrada.
+        atol: tolerancia máxima para considerar simétricas dos entradas.
+    Retorna:
+        True si A es simétrica dentro de la tolerancia y definida positiva.
+        False en caso contrario.
     """
-    Decide si A es simetrica definida positiva mediante su LDV.
-    """
-    if atol < 0:
+    if A is None or atol < 0 or len(A.shape) != 2:
         return False
 
-    try:
-        matriz = np.array(A, dtype=float)
-    except:
+    n = A.shape[0]
+    if A.shape[1] != n:
         return False
 
-    # TODO: NO PERMITIDO: np.ndim no figura entre las funciones habilitadas.
-    if np.ndim(matriz) != 2 or matriz.shape[0] != matriz.shape[1]:
-        return False
-
-    n = matriz.shape[0]
     for i in range(n):
         for j in range(i + 1, n):
-            if np.abs(matriz[i, j] - matriz[j, i]) > atol:
+            if abs(A[i, j] - A[j, i]) > atol:
                 return False
 
-    resultado_ldv = calculaLDV(matriz)
+    resultado_ldv = calculaLDV(A)
     if resultado_ldv is None:
         return False
-
     _, D, _ = resultado_ldv
+
     for i in range(n):
         if D[i, i] <= atol:
             return False
@@ -626,16 +604,25 @@ def esSDP(A, atol=1e-10):
 
 
 def calculaCholesky(A, atol=1e-10):
-    """
-    Calcula A = R R^t, con R triangular inferior, cuando A es SDP.
+    """Calcula una factorización de Cholesky de una matriz SDP.
+
+    Parámetros:
+        A: matriz simétrica definida positiva.
+        atol: tolerancia usada para verificar simetría y positividad.
+    Retorna:
+        La matriz triangular inferior R tal que A = R R.T, o None si A no es
+        simétrica definida positiva.
     """
     if not esSDP(A, atol):
         return None
 
-    L, D, _ = calculaLDV(A)
+    resultado_ldv = calculaLDV(A)
+    if resultado_ldv is None:
+        return None
+    L, D, _ = resultado_ldv
+
     n = L.shape[0]
     R = np.zeros((n, n))
-
     for i in range(n):
         for j in range(i + 1):
             R[i, j] = L[i, j] * D[j, j] ** 0.5
