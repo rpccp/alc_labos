@@ -2,9 +2,11 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
 
 # Configuraciones personales
 .vscode/
+.idea/
 
 # Archivos temporales
 tmp/
