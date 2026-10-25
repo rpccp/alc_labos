@@ -1,7 +1,16 @@
+import random
+
 import numpy as np
 
 
 def copiar_matriz(A):
+    """Crea una copia independiente de una matriz o un vector.
+
+    Parámetros:
+        A: matriz bidimensional o vector.
+    Retorna:
+        Una copia de A.
+    """
     if len(A.shape) == 1:
         copia = np.zeros(A.shape[0])
         for i in range(A.shape[0]):
@@ -15,6 +24,69 @@ def copiar_matriz(A):
             copia[i, j] = A[i, j]
 
     return copia
+
+
+def mult_mat(A, B):
+    """Calcula el producto matricial entre dos matrices.
+
+    Parámetros:
+        A: primera matriz del producto.
+        B: segunda matriz del producto.
+    Retorna:
+        La matriz resultante de multiplicar A por B.
+    """
+    filas_A, columnas_A = A.shape
+    filas_B, columnas_B = B.shape
+    if columnas_A != filas_B:
+        return None
+
+    AB = np.zeros((filas_A, columnas_B))
+    for i in range(filas_A):
+        for j in range(columnas_B):
+            for k in range(columnas_A):
+                AB[i, j] += A[i, k] * B[k, j]
+
+    return AB
+
+
+def mult_mat_vector(A, x):
+    """Calcula el producto de una matriz por un vector.
+
+    Parámetros:
+        A: matriz de coeficientes.
+        x: vector de entrada.
+    Retorna:
+        El vector b tal que A x = b, o None si las dimensiones no coinciden.
+    """
+    filas, columnas = A.shape
+    if columnas != len(x):
+        return None
+
+    b = np.zeros(filas)
+    for i in range(filas):
+        for j in range(columnas):
+            b[i] += A[i, j] * x[j]
+
+    return b
+
+
+def producto_interno(x, y):
+    """Calcula el producto interno entre dos vectores.
+
+    Parámetros:
+        x: primer vector.
+        y: segundo vector.
+    Retorna:
+        El producto interno de x e y, o None si sus dimensiones no coinciden.
+    """
+    if len(x) != len(y):
+        return None
+
+    producto = 0
+    for i in range(len(x)):
+        producto += x[i] * y[i]
+
+    return producto
 
 
 def esCuadrada(A):
@@ -189,8 +261,7 @@ def rota_y_escala(theta, s):
     Retorna:
         La matriz que resulta de aplicar la rotación y el escalamiento.
     """
-    # TODO: NO PERMITIDO: el producto matricial debe implementarse por el grupo.
-    return escala(s) @ rota(theta)
+    return mult_mat(escala(s), rota(theta))
 
 
 def afin(theta, s, b):
@@ -226,56 +297,87 @@ def trans_afin(v, theta, s, b):
     T = afin(theta, s, b)
 
     v_hom = np.array([v[0], v[1], 1])
-    # TODO: NO PERMITIDO: el producto matricial debe implementarse por el grupo.
-    w_hom = T @ v_hom
+    w_hom = mult_mat_vector(T, v_hom)
 
     return w_hom[:2]
 
 
 def norma(x, p):
-    if p == 1:
-        return sum([np.abs(n) for n in x])
+    res = 0
+    max_abs = 0
 
-    elif p == "inf":
-        max = 0
-        for n in x:
-            if np.abs(n) > max:
-                max = np.abs(n)
-        return max
+    if p == 'inf':
+        for i in x:
+            if np.abs(i) > max_abs: max_abs = abs(i)
+        return max_abs
 
-    suma = sum([n ** p for n in x])
-    return np.power(suma, 1 / p)
+    for i in x:
+        res += abs(i) ** p
+
+    return res ** (1 / p)
 
 
 def normaliza(X, p):
     return [x / norma(x, p) for x in X]
 
 
-# def normaMatMC(A, q, p, Np):
-#     """
-#     Devuelve la norma A-{q,p} y el vector x en el cual se alcanza
-#     el maximo.
-#     """
-#     vectoresAlAzar = np.random.rand(Np, A.shape[1])
-#     vectoresNormalizados = normaliza(vectoresAlAzar, p)
-#     vectorConNorma = map(lambda x: [norma(A@x, q), x], vectoresNormalizados)
-#     return max(vectorConNorma, key=lambda p: p[0])
+def normaMatMC(A, q, p, Np):
+    max = 0
+    m = A.shape[1]
+    for _ in range(Np):
+        v = np.zeros(m)
+        for i in range(m):
+            v[i] = random.uniform(-1.0, 1.0)
+        normaV = norma(v, p)
+        if normaV == 0:
+            continue
+        v /= normaV
+        Av = mult_mat_vector(A, v)
+        normaAv = norma(Av, q)
+        if normaAv > max:
+            max = normaAv
+    return max
 
-def normaExacta(A, p=[1, "inf"]):
-    def normaM(A, p):
-        if p == "inf":
-            sumas_inf = np.zeros(A.shape[0])
-            for i in range(0, A.shape[0]):
-                for j in range(0, A.shape[1]):
-                    sumas_inf[i] += np.abs(A[i][j])
-            return max(sumas_inf)
 
-        if p == 1:
-            sumas_1 = np.zeros(A.shape[1])
+def normaExacta(A, p=[1, 'inf']):
+    if p not in [1, 'inf'] and p != [1, 'inf']:
+        return None
+
+    n = len(A)
+    normaInf = 0
+    norma1 = 0
+
+    for row in range(n):
+        suma_fila = 0
+        suma_col = 0
+        for col in range(n):
+            suma_fila += np.abs(A[row, col])
+            suma_col += np.abs(A[col, row])
+
+        if (suma_fila > normaInf): normaInf = suma_fila
+        if (suma_col > norma1): norma1 = suma_col
+
+    if p == 1:
+        return norma1
+    elif p == 'inf':
+        return normaInf
+    return [norma1, normaInf]
+
+
+def normaM(A, p):
+    if p == "inf":
+        sumas_inf = np.zeros(A.shape[0])
+        for i in range(0, A.shape[0]):
             for j in range(0, A.shape[1]):
-                for i in range(0, A.shape[0]):
-                    sumas_1[j] += np.abs(A[i][j])
-            return max(sumas_1)
+                sumas_inf[i] += np.abs(A[i][j])
+        return max(sumas_inf)
+
+    if p == 1:
+        sumas_1 = np.zeros(A.shape[1])
+        for j in range(0, A.shape[1]):
+            for i in range(0, A.shape[0]):
+                sumas_1[j] += np.abs(A[i][j])
+        return max(sumas_1)
 
     if p == "inf": return normaM(A, "inf")
 
@@ -287,11 +389,11 @@ def normaExacta(A, p=[1, "inf"]):
 
 
 def condMC(A, p):
-    ...
+    return normaMatMC(A, p, p, 100)[0] * normaMatMC(np.linalg.inv(A), p, p, 100)[0]
 
 
-def condExacto(A, p):
-    ...
+def condExacta(A, p=[1, 'inf']):
+    return normaExacta(A, p) * normaExacta(np.linalg.inv(A), p)
 
 
 ################# LABO 4 #################
@@ -514,7 +616,7 @@ def GS(A, tol, retorna_nops):
         q_j_moño = copiar_matriz(A[:, j])
 
         for k in range(0, j):
-            R[k, j] = Q[:, k].T @ q_j_moño
+            R[k, j] = producto_interno(Q[:, k], q_j_moño)
             q_j_moño = q_j_moño - R[k, j] * Q[:, k]
             nops += (2 * n - 1) + 2
 
@@ -628,23 +730,10 @@ def calculaQR(A, metodo="RH", tol=1e-12):
 
 ################# LABO 6 #################
 
-def multMat(A, B):
-    filasA = A.shape[0]
-    columnasB = B.shape[1]
-    columnasA = A.shape[1]
-    AB = np.zeros((filasA, columnasB))
-
-    for i in range(filasA):
-        for j in range(columnasB):
-            for k in range(columnasA):
-                AB[i, j] += A[i, k] * B[k, j]
-
-    return AB
-
 
 def metpot2k(A, tol=1e-15, K=1000):
     def f(A, v):
-        res = multMat(A, v)
+        res = mult_mat(A, v)
         return res / norma(res, 2)
 
     n = len(A)
@@ -652,16 +741,16 @@ def metpot2k(A, tol=1e-15, K=1000):
     v = np.random.rand(n, 1)
     v_moño = f(A, f(A, v))
 
-    e = multMat(v_moño.T, v)
+    e = mult_mat(v_moño.T, v)
 
     k = 0
     while (np.abs(e - 1) > tol) and (k < K):
         v = v_moño
         v_moño = f(A, f(A, v))
-        e = multMat(v_moño.T, v)
+        e = mult_mat(v_moño.T, v)
         k += 1
 
-    autovalor = multMat(v_moño.T, multMat(A, v_moño))
+    autovalor = mult_mat(v_moño.T, mult_mat(A, v_moño))
 
     return (v_moño, autovalor[0][0], k)
 
@@ -679,12 +768,12 @@ def diagRH(A, tol=1e-15, K=1000):
     norma_u = norma(u, 2) ** 2
 
     if norma_u > tol:
-        proyeccion = multMat(u, u.T)
+        proyeccion = mult_mat(u, u.T)
         H_v_1 = I - 2 * (proyeccion / norma_u)
     else:
         H_v_1 = I
 
-    B = multMat(H_v_1, multMat(A, H_v_1.T))
+    B = mult_mat(H_v_1, mult_mat(A, H_v_1.T))
     A_moño = B[1:, 1:]
 
     S_moño, D_moño = diagRH(A_moño, tol, K)
@@ -695,7 +784,7 @@ def diagRH(A, tol=1e-15, K=1000):
 
     S = np.eye(n)
     S[1:, 1:] = S_moño
-    S = multMat(H_v_1, S)
+    S = mult_mat(H_v_1, S)
 
     return (S, D)
 
@@ -764,7 +853,7 @@ def nucleo(A, tol=1e-15):
 
     # Sabemos que A^t * A tiene el mismo nucleo que A. A^t * A es simetrica 
     # entonces podemos usar diagRH
-    AtA = multMat(A.T, A)
+    AtA = mult_mat(A.T, A)
 
     # Ahora la diagonalizamos
     S, D = diagRH(AtA, tol)
@@ -827,11 +916,11 @@ def svd_reducida(A, k="max", tol=1e-15):
     m, n = np.shape(A)
 
     if m < n:
-        U, Sigma2 = diagRH(multMat(A, A.T), tol)
-        V = multMat(U.T, A).T
+        U, Sigma2 = diagRH(mult_mat(A, A.T), tol)
+        V = mult_mat(U.T, A).T
     else:
-        V, Sigma2 = diagRH(multMat(A.T, A), tol)
-        U = multMat(A, V)
+        V, Sigma2 = diagRH(mult_mat(A.T, A), tol)
+        U = mult_mat(A, V)
 
     Sigma = []
     for i in range(min(n, m)):
