@@ -67,7 +67,7 @@ def traspuesta(A):
     Parámetros:
         A: matriz representada como un array bidimensional.
     Retorna:
-        Un array con filas y columnas intercambiadas.
+        Una matriz con filas y columnas intercambiadas.
     """
     At = []
     filas, columnas = A.shape
@@ -111,8 +111,7 @@ def error(x, y):
     Retorna:
         El valor absoluto de la diferencia entre x e y.
     """
-    # TODO: NO PERMITIDO: np.float64 no figura entre los tipos habilitados.
-    return abs(x - np.float64(y))
+    return np.abs(np.float32(x) - np.float32(y))
 
 
 def error_relativo(x, y):
@@ -124,7 +123,7 @@ def error_relativo(x, y):
     Retorna:
         El error absoluto entre ambos valores dividido por el valor absoluto de x.
     """
-    return error(x, y) / abs(x)
+    return error(x, y) / np.abs(x)
 
 
 def matricesIguales(A, B):
@@ -134,18 +133,18 @@ def matricesIguales(A, B):
         A: primera matriz.
         B: segunda matriz.
     Retorna:
-        True si tienen igual forma y sus elementos difieren a lo sumo en eps;
+        True si tienen igual forma y sus elementos difieren a lo sumo en eps.
         False en caso contrario.
     """
-    f, c = A.shape
-    if ((f, c) != B.shape):
+    filas, columnas = A.shape
+    if A.shape != B.shape:
         return False
 
     # TODO: NO PERMITIDO: np.finfo no figura entre las funciones habilitadas.
     eps = np.finfo('float').eps
 
-    for i in range(f):
-        for j in range(c):
+    for i in range(filas):
+        for j in range(columnas):
             if error(A[i, j], B[i, j]) > eps:
                 return False
 
@@ -235,13 +234,13 @@ def trans_afin(v, theta, s, b):
 
 def norma(x, p):
     if p == 1:
-        return sum([abs(n) for n in x])
+        return sum([np.abs(n) for n in x])
 
     elif p == "inf":
         max = 0
         for n in x:
-            if abs(n) > max:
-                max = abs(n)
+            if np.abs(n) > max:
+                max = np.abs(n)
         return max
 
     suma = sum([n ** p for n in x])
@@ -268,14 +267,14 @@ def normaExacta(A, p=[1, "inf"]):
             sumas_inf = np.zeros(A.shape[0])
             for i in range(0, A.shape[0]):
                 for j in range(0, A.shape[1]):
-                    sumas_inf[i] += abs(A[i][j])
+                    sumas_inf[i] += np.abs(A[i][j])
             return max(sumas_inf)
 
         if p == 1:
             sumas_1 = np.zeros(A.shape[1])
             for j in range(0, A.shape[1]):
                 for i in range(0, A.shape[0]):
-                    sumas_1[j] += abs(A[i][j])
+                    sumas_1[j] += np.abs(A[i][j])
             return max(sumas_1)
 
     if p == "inf": return normaM(A, "inf")
@@ -462,7 +461,7 @@ def esSDP(A, atol=1e-10):
     n = matriz.shape[0]
     for i in range(n):
         for j in range(i + 1, n):
-            if abs(matriz[i, j] - matriz[j, i]) > atol:
+            if np.abs(matriz[i, j] - matriz[j, i]) > atol:
                 return False
 
     resultado_ldv = calculaLDV(matriz)
