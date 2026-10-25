@@ -432,18 +432,63 @@ def QR_con_HH(A,tol=1e-12,extras=False):
     extra_info es un diccionario con la clave:
         'R_matrices': lista de las matrices R en cada paso
         'Q_matrices': lista de las matrices Q en cada paso
-    """
-    raise NotImplemented("")
 
-def calculaQR(A,metodo='RH',tol=1e-12):
+
     """
-    A una matriz de n x n 
-    tol la tolerancia con la que se filtran elementos nulos en R    
-    metodo = ['RH','GS'] usa reflectores de Householder (RH) o Gram Schmidt (GS) para realizar la factorizacion
-    retorna matrices Q y R calculadas con Gram Schmidt (y como tercer argumento opcional, el numero de operaciones)
-    Si el metodo no esta entre las opciones, retorna None
-    """
-    raise NotImplemented("")
+    filas, columnas = A.shape
+    if filas < columnas:
+        return None
+    
+    R = np.copy(A)
+    
+    Q = np.eye(filas)
+    
+    extra_info = {
+        'R_matrices': [],
+        'Q_matrices': []
+    }
+
+    for k in range(columnas):
+        if extras:
+            extra_info['R_matrices'].append(np.copy(R))
+            extra_info['Q_matrices'].append(np.copy(Q))
+            
+        # tajada vertical de la submatriz abajo a la derecha a partir de R[k,k]
+        x = R[k:,k]
+
+        # norma con - evita cancelacion numerica
+        alpha = -signo(x[0]) * norma(x, 2)
+        
+        #definimos u perpendicular al espejo
+        #columna x -  normaSignoAlternado* primer canonico con dimension (m-k+1)
+        u = x - alpha* np.eye(filas-k)[0]
+        norma_u = norma(u,2)
+        if norma_u > tol: #si no lo es, no lo procesamos, ya habia ceros debajo de la diagonal, pasamos a sig columna
+            #si norma mayor a cero, reflejamos
+            #normalizo
+            u = u / norma_u 
+            #submatriz de reflectores espejo, dimension (m-k)x(m-k)
+            H_k = np.eye(filas-k) - 2 * multiplacionMatricialDeVectores(u,u)
+            #expandimos a la dimension de la matriz original, agrgando identidad arriba a la izquierda
+            H_kp = np.eye(filas)
+            H_kp[k:filas, k:filas] = H_k
+            R = multiplicar(H_kp,R)
+            Q = multiplicar(Q, H_kp)
+
+    if extras:
+        extra_info['R_matrices'].append(np.copy(R))
+        extra_info['Q_matrices'].append(np.copy(Q))
+        return Q, R, extra_info
+
+    return Q, R
+
+def calculaQR(A, metodo = "RH", tol = 1e-12):
+    if metodo == "GS":
+        return QR_con_GS(A, tol)
+    elif metodo == "RH":
+        return QR_con_HH(A, tol)
+    else:
+        return None
 
 ################# LABO 6 #################
 
