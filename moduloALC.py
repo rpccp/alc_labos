@@ -36,9 +36,7 @@ def mult_mat(A, B):
         La matriz resultante de multiplicar A por B.
     """
     filas_A, columnas_A = A.shape
-    filas_B, columnas_B = B.shape
-    if columnas_A != filas_B:
-        return None
+    _, columnas_B = B.shape
 
     AB = np.zeros((filas_A, columnas_B))
     for i in range(filas_A):
@@ -56,12 +54,9 @@ def mult_mat_vector(A, x):
         A: matriz de coeficientes.
         x: vector de entrada.
     Retorna:
-        El vector b tal que A x = b, o None si las dimensiones no coinciden.
+        El vector b tal que A x = b.
     """
     filas, columnas = A.shape
-    if columnas != len(x):
-        return None
-
     b = np.zeros(filas)
     for i in range(filas):
         for j in range(columnas):
@@ -87,6 +82,39 @@ def producto_interno(x, y):
         producto += x[i] * y[i]
 
     return producto
+
+
+def inversa(A):
+    """Calcula la inversa de una matriz mediante su factorización LU.
+
+    Parámetros:
+        A: matriz cuadrada a invertir.
+    Retorna:
+        La matriz inversa de A, o None si A no se puede invertir.
+    """
+    L, U, _ = calculaLU(A)
+
+    if L is None or U is None:
+        return None
+
+    n = U.shape[0]
+    A_inversa = np.zeros((n, n))
+
+    for j in range(n):
+        e_j = np.zeros(n)
+        e_j[j] = 1.0
+
+        y = res_tri(L, e_j)
+        if y is None:
+            return None
+
+        x = res_tri(U, y, inferior=False)
+        if x is None:
+            return None
+
+        A_inversa[:, j] = x
+
+    return A_inversa
 
 
 def esCuadrada(A):
@@ -245,11 +273,11 @@ def escala(s):
         Una matriz diagonal cuyos elementos diagonales son los de s.
     """
     n = len(s)
-    matriz = np.zeros((n, n))
+    A = np.zeros((n, n))
     for i in range(n):
-        matriz[i, i] = s[i]
+        A[i, i] = s[i]
 
-    return matriz
+    return A
 
 
 def rota_y_escala(theta, s):
@@ -303,6 +331,14 @@ def trans_afin(v, theta, s, b):
 
 
 def norma(x, p):
+    """Calcula la norma p de un vector.
+
+    Parámetros:
+        x: vector al que se le calcula la norma.
+        p: orden de la norma, o 'inf' para la norma infinito.
+    Retorna:
+        El valor de la norma de x.
+    """
     res = 0
     max_abs = 0
 
@@ -318,28 +354,57 @@ def norma(x, p):
 
 
 def normaliza(X, p):
+    """Normaliza los vectores de una lista según la norma p.
+
+    Parámetros:
+        X: lista de vectores a normalizar.
+        p: orden de la norma, o 'inf' para la norma infinito.
+    Retorna:
+        Una lista con los vectores normalizados.
+    """
     return [x / norma(x, p) for x in X]
 
 
 def normaMatMC(A, q, p, Np):
-    max = 0
+    """Estima por Monte Carlo la norma matricial inducida de A.
+
+    Parámetros:
+        A: matriz a la que se le calcula la norma.
+        q: orden de la norma del vector resultante.
+        p: orden de la norma de los vectores de entrada.
+        Np: cantidad de vectores aleatorios a probar.
+    Retorna:
+        La mayor norma q de A aplicada a los vectores probados con norma p uno.
+    """
+    res = 0
     m = A.shape[1]
     for _ in range(Np):
         v = np.zeros(m)
         for i in range(m):
             v[i] = random.uniform(-1.0, 1.0)
         normaV = norma(v, p)
+
         if normaV == 0:
             continue
+
         v /= normaV
         Av = mult_mat_vector(A, v)
         normaAv = norma(Av, q)
-        if normaAv > max:
-            max = normaAv
-    return max
+
+        if normaAv > res:
+            res = normaAv
+    return res
 
 
 def normaExacta(A, p=[1, 'inf']):
+    """Calcula la norma 1, la norma infinito o ambas para una matriz.
+
+    Parámetros:
+        A: matriz a la que se le calculan las normas.
+        p: 1, 'inf' o la lista [1, 'inf'] para calcular ambas.
+    Retorna:
+        La norma solicitada, ambas normas en una lista, o None si p no es válido.
+    """
     if p not in [1, 'inf'] and p != [1, 'inf']:
         return None
 
@@ -354,8 +419,8 @@ def normaExacta(A, p=[1, 'inf']):
             suma_fila += np.abs(A[row, col])
             suma_col += np.abs(A[col, row])
 
-        if (suma_fila > normaInf): normaInf = suma_fila
-        if (suma_col > norma1): norma1 = suma_col
+        if suma_fila > normaInf: normaInf = suma_fila
+        if suma_col > norma1: norma1 = suma_col
 
     if p == 1:
         return norma1
@@ -364,39 +429,51 @@ def normaExacta(A, p=[1, 'inf']):
     return [norma1, normaInf]
 
 
-def normaM(A, p):
-    if p == "inf":
-        sumas_inf = np.zeros(A.shape[0])
-        for i in range(0, A.shape[0]):
-            for j in range(0, A.shape[1]):
-                sumas_inf[i] += np.abs(A[i][j])
-        return max(sumas_inf)
-
-    if p == 1:
-        sumas_1 = np.zeros(A.shape[1])
-        for j in range(0, A.shape[1]):
-            for i in range(0, A.shape[0]):
-                sumas_1[j] += np.abs(A[i][j])
-        return max(sumas_1)
-
-    if p == "inf": return normaM(A, "inf")
-
-    if isinstance(p, int): return normaM(A, p)
-
-    if p == [1, "inf"]: return [normaM(A, 1), normaM(A, "inf")]
-
-    return None
-
-
 def condMC(A, p):
-    return normaMatMC(A, p, p, 100)[0] * normaMatMC(np.linalg.inv(A), p, p, 100)[0]
+    """Estima por Monte Carlo el número de condición de A.
+
+    Parámetros:
+        A: matriz cuadrada cuyo número de condición se estima.
+        p: orden de la norma utilizada.
+    Retorna:
+        La estimación del número de condición, o None si A no es invertible.
+    """
+    Np = 100
+    A_inversa = inversa(A)
+    if A_inversa is None:
+        return None
+
+    return normaMatMC(A, p, p, Np) * normaMatMC(A_inversa, p, p, Np)
 
 
 def condExacta(A, p=[1, 'inf']):
-    return normaExacta(A, p) * normaExacta(np.linalg.inv(A), p)
+    """Calcula el número de condición de A usando la norma indicada.
 
+    Parámetros:
+        A: matriz cuadrada cuyo número de condición se calcula.
+        p: 1, 'inf' o la lista [1, 'inf'] para calcular ambas condiciones.
+    Retorna:
+        El número de condición solicitado, una lista con ambas condiciones
+        si p es [1, 'inf'], o None si p no es válido o A no es invertible.
+    """
+    if p not in [1, 'inf'] and p != [1, 'inf']:
+        return None
 
-################# LABO 4 #################
+    A_inversa = inversa(A)
+    if A_inversa is None:
+        return None
+
+    norma_A = normaExacta(A, p)
+    norma_A_inversa = normaExacta(A_inversa, p)
+    if norma_A is None or norma_A_inversa is None:
+        return None
+
+    if p == [1, 'inf']:
+        return [norma_A[0] * norma_A_inversa[0],
+                norma_A[1] * norma_A_inversa[1]]
+
+    return norma_A * norma_A_inversa
+
 
 def calculaLU(A):
     """Calcula la factorización LU de A sin pivoteo.
@@ -488,36 +565,6 @@ def res_tri(A, b, inferior=True):
             x[i] = (termino_independiente[i] - suma) / T[i, i]
 
     return x
-
-
-def inversa(A):
-    """
-    Calcula la inversa de A mediante su factorizacion LU.
-    """
-    resultado_lu = calculaLU(A)
-    L, U, _ = resultado_lu
-
-    if L is None or U is None:
-        return None
-
-    n = U.shape[0]
-    A_inversa = np.zeros((n, n))
-
-    for j in range(n):
-        e_j = np.zeros(n)
-        e_j[j] = 1.0
-
-        y = res_tri(L, e_j)
-        if y is None:
-            return None
-
-        x = res_tri(U, y, inferior=False)
-        if x is None:
-            return None
-
-        A_inversa[:, j] = x
-
-    return A_inversa
 
 
 def calculaLDV(A):
