@@ -633,42 +633,51 @@ def calculaCholesky(A, atol=1e-10):
 ################# LABO 5 #################
 
 def GS(A, tol, retorna_nops):
-    Q = np.zeros(A.shape)
-    R = np.zeros(A.shape)
+    """Calcula una factorización QR mediante Gram-Schmidt modificado.
 
-    n = len(A)
-
+    Parámetros:
+        A: matriz de tamaño (m, n).
+        tol: tolerancia para descartar residuos de norma pequeña.
+        retorna_nops: indica si se devuelve la estimación de operaciones.
+    Retorna:
+        Q de tamaño (m, r) y R de tamaño (r, n), donde r es la cantidad
+        de columnas independientes detectadas. Opcionalmente devuelve
+        nops como tercer resultado. (Cuenta productos, sumas, restas,
+        divisiones y raíces)
+    """
+    filas, columnas = A.shape
+    Q = np.zeros((filas, columnas))
+    R = np.zeros((columnas, columnas))
     r = 0
-    norma_a0 = norma(A[:, 0])
-    if norma_a0 > tol:
-        Q[:, 0] = A[:, 0] / norma_a0
-        R[0, 0] = norma_a0
-        nops = 2 + (n + (n - 1) + 1)
-        r += 1
+    nops = 0
 
-    for j in range(1, n):
+    # Procesamos cada columna...
+    for j in range(columnas):
         q_j_moño = copiar_matriz(A[:, j])
 
-        for k in range(0, j):
+        # Proyectamos solo sobre los r vectores de la base construida.
+        for k in range(r):
             R[k, j] = producto_interno(Q[:, k], q_j_moño)
             q_j_moño = q_j_moño - R[k, j] * Q[:, k]
-            nops += (2 * n - 1) + 2
+            nops += (2 * filas - 1) + 2 * filas
 
-        norma_qj_moño = norma(q_j_moño)
+        norma_qj_moño = norma(q_j_moño, 2)
+        nops += 2 * filas
 
+        # Solo un residuo no nulo aporta un nuevo vector a la base.
         if norma_qj_moño > tol:
             R[r, j] = norma_qj_moño
             Q[:, r] = q_j_moño / R[r, j]
-            nops += 2 + (n + (n - 1) + 1) + n
+            nops += filas
             r += 1
 
     Q_final = Q[:, :r]
     R_final = R[:r, :]
 
     if retorna_nops:
-        return Q, R, nops
+        return Q_final, R_final, nops
 
-    return Q, R
+    return Q_final, R_final
 
 
 ### Funciones L05-QR
@@ -677,7 +686,9 @@ def QR_con_GS(A, tol=1e-12, retorna_nops=False):
     A una matriz de n x n 
     tol la tolerancia con la que se filtran elementos nulos en R
     retorna_nops permite (opcionalmente) retornar el numero de operaciones realizado
-    retorna matrices Q y R calculadas con Gram Schmidt (y como tercer argumento opcional, el numero de operaciones).
+    retorna Q de tamaño (n, r) y R de tamaño (r, n), calculadas con Gram Schmidt,
+    siendo r la cantidad de columnas independientes detectadas. Como tercer
+    argumento opcional retorna la estimación del número de operaciones.
     Si la matriz A no es de n x n, debe retornar None
     """
     if A is None: return None
@@ -689,7 +700,7 @@ def QR_con_GS(A, tol=1e-12, retorna_nops=False):
 def QR_con_HH(A, tol=1e-12, extras=False):
     """
     A una matriz de m x n (m>=n)
-    tol la tolerancia con la que se filtran elementos nulos en R
+    tol la tolerancia para considerar nulo el vector que define Householder.
     retorna matrices Q y R calculadas con reflexiones de Householder
     Si la matriz A no cumple m>=n, debe retornar None
     extras : bool, opcional
@@ -699,6 +710,7 @@ def QR_con_HH(A, tol=1e-12, extras=False):
     Devuelve: 
         Q, R, extra_info (si extras es True)
         Q, R (si extras es False)
+    Q tiene tamaño (m, m) y R tiene tamaño (m, n), con A = QR.
     extra_info es un diccionario con la clave:
         'R_matrices': lista de las matrices R en cada paso
         'Q_matrices': lista de las matrices Q en cada paso
@@ -726,8 +738,8 @@ def QR_con_HH(A, tol=1e-12, extras=False):
         # tajada vertical de la submatriz abajo a la derecha a partir de R[k,k]
         x = R[k:, k]
 
-        # norma con - evita cancelacion numerica
-        alpha = -signo(x[0]) * norma(x, 2)
+        signo_x0 = 1 if x[0] >= 0 else -1
+        alpha = -signo_x0 * norma(x, 2)
 
         # definimos u perpendicular al espejo
         # columna x -  normaSignoAlternado* primer canonico con dimension (m-k+1)
@@ -738,12 +750,13 @@ def QR_con_HH(A, tol=1e-12, extras=False):
             # normalizo
             u = u / norma_u
             # submatriz de reflectores espejo, dimension (m-k)x(m-k)
-            H_k = np.eye(filas - k) - 2 * multiplacionMatricialDeVectores(u, u)
+            u_columna = u.reshape((filas - k, 1))
+            H_k = np.eye(filas - k) - 2 * mult_mat(u_columna, u_columna.T)
             # expandimos a la dimension de la matriz original, agrgando identidad arriba a la izquierda
             H_kp = np.eye(filas)
             H_kp[k:filas, k:filas] = H_k
-            R = multiplicar(H_kp, R)
-            Q = multiplicar(Q, H_kp)
+            R = mult_mat(H_kp, R)
+            Q = mult_mat(Q, H_kp)
 
     if extras:
         extra_info['R_matrices'].append(copiar_matriz(R))
