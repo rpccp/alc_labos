@@ -408,18 +408,20 @@ def normaExacta(A, p=[1, 'inf']):
     if p not in [1, 'inf'] and p != [1, 'inf']:
         return None
 
-    n = len(A)
+    filas, columnas = A.shape
     normaInf = 0
     norma1 = 0
 
-    for row in range(n):
+    for row in range(filas):
         suma_fila = 0
-        suma_col = 0
-        for col in range(n):
+        for col in range(columnas):
             suma_fila += np.abs(A[row, col])
-            suma_col += np.abs(A[col, row])
-
         if suma_fila > normaInf: normaInf = suma_fila
+
+    for col in range(columnas):
+        suma_col = 0
+        for row in range(filas):
+            suma_col += np.abs(A[row, col])
         if suma_col > norma1: norma1 = suma_col
 
     if p == 1:
@@ -522,18 +524,21 @@ def res_tri(L, b, inferior=True):
     """Resuelve un sistema triangular mediante sustitución.
 
     Parámetros:
-        L: matriz triangular con diagonal no nula.
+        L: matriz triangular.
         b: vector del lado derecho, compatible con L.
         inferior: indica si L es triangular inferior. Si no, se considera
             triangular superior.
     Retorna:
-        El vector x que resuelve Lx = b.
+        El vector x que resuelve Lx = b, o None si la diagonal contiene
+        un elemento nulo.
     """
     n = L.shape[0]
     X = np.zeros(len(b))
 
     if inferior:
         for i in range(n):
+            if L[i, i] == 0:
+                return None
             X[i] = b[i]
             for j in range(i):
                 X[i] -= L[i, j] * X[j]
@@ -541,6 +546,8 @@ def res_tri(L, b, inferior=True):
         return X
 
     for i in range(n - 1, -1, -1):
+        if L[i, i] == 0:
+            return None
         X[i] = b[i]
         for j in range(i + 1, n):
             X[i] -= L[i, j] * X[j]
@@ -630,8 +637,6 @@ def calculaCholesky(A, atol=1e-10):
     return R
 
 
-################# LABO 5 #################
-
 def GS(A, tol, retorna_nops):
     """Calcula una factorización QR mediante Gram-Schmidt modificado.
 
@@ -680,7 +685,6 @@ def GS(A, tol, retorna_nops):
     return Q_final, R_final
 
 
-### Funciones L05-QR
 def QR_con_GS(A, tol=1e-12, retorna_nops=False):
     """
     A una matriz de n x n 
@@ -714,8 +718,6 @@ def QR_con_HH(A, tol=1e-12, extras=False):
     extra_info es un diccionario con la clave:
         'R_matrices': lista de las matrices R en cada paso
         'Q_matrices': lista de las matrices Q en cada paso
-
-
     """
     filas, columnas = A.shape
     if filas < columnas:
@@ -775,9 +777,6 @@ def calculaQR(A, metodo="RH", tol=1e-12):
         return None
 
 
-################# LABO 6 #################
-
-
 def metpot2k(A, tol=1e-15, K=1000):
     def f(A, v):
         res = mult_mat(A, v)
@@ -833,10 +832,9 @@ def diagRH(A, tol=1e-15, K=1000):
     S[1:, 1:] = S_moño
     S = mult_mat(H_v_1, S)
 
-    return (S, D)
+    return S, D
 
 
-################# LABO 7 #################
 def matriz(n):
     if n == 1:
         return np.array([[1]])
@@ -950,8 +948,6 @@ def multiplica_rala_vector(A, v):
     return np.array([w])
 
 
-################# LABO 8 #################
-
 def svd_reducida(A, k="max", tol=1e-15):
     """
     A la matriz de interes (de m x n)
@@ -990,4 +986,4 @@ def svd_reducida(A, k="max", tol=1e-15):
         for j in range(r):
             U[:, j] /= norma(U[:, j], 2)
 
-    return (U, Sigma, V)
+    return U, Sigma, V
