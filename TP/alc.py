@@ -430,3 +430,33 @@ def estimarHomografia(imgPts, objPts, tol=1e-15, K=1000):
     # Volvemos a las coordenadas originales según la ecuación 14.
     H = mult_mat(T_img_inversa, mult_mat(H_normalizada, T_obj))
     return H
+
+
+def armarA(Hlst):
+    """Construye la matriz A del sistema homogéneo de calibración coplanar.
+
+    Parámetros:
+        Hlst : lista de N matrices de tamaño (3, 3)
+            Homografías del plano del objeto a la imagen.
+
+    Retorna:
+        A : numpy.ndarray de tamaño (2*N, 6)
+            Matriz del sistema Ab=0, con las incógnitas ordenadas como
+            b=(B11, B12, B22, B13, B23, B33).
+    """
+    def restriccion(H, i, j):
+        # Coeficientes de c_i.T B c_j, agrupando las entradas simétricas de B.
+        return np.array([
+            H[0, i] * H[0, j],
+            H[0, i] * H[1, j] + H[1, i] * H[0, j],
+            H[1, i] * H[1, j],
+            H[2, i] * H[0, j] + H[0, i] * H[2, j],
+            H[2, i] * H[1, j] + H[1, i] * H[2, j],
+            H[2, i] * H[2, j]])
+
+    A = np.zeros((2 * len(Hlst), 6))
+    for i in range(len(Hlst)):
+        H = Hlst[i]
+        A[2 * i] = restriccion(H, 0, 1)
+        A[2 * i + 1] = restriccion(H, 0, 0) - restriccion(H, 1, 1)
+    return A
