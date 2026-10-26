@@ -6,21 +6,19 @@ import numpy as np
 def obtenerQ2d(imgPts, objPts):
     """Construye la matriz Q del DLT coplanar (ecuación 11 del enunciado).
 
-    Parámetros
-    ----------
-    imgPts : arreglo de tamaño (n, 2)
-        Coordenadas (u, v) de los puntos en la imagen, en píxeles.
-    objPts : arreglo de tamaño (n, 2)
-        Coordenadas (U, V) de los puntos en el plano del objeto, expresadas
-        en una misma unidad. La fila i corresponde al mismo punto en ambos
-        arreglos. Se reciben coordenadas cartesianas.
+    Parámetros:
+        imgPts : arreglo de tamaño (n, 2)
+            Coordenadas (u, v) de los puntos en la imagen, en píxeles.
+        objPts : arreglo de tamaño (n, 2)
+            Coordenadas (U, V) de los puntos en el plano del objeto, expresadas
+            en una misma unidad. La fila i corresponde al mismo punto en ambos
+            arreglos. Se reciben coordenadas cartesianas.
 
-    Retorna
-    -------
-    Q : numpy.ndarray de tamaño (2*n, 9)
-        Matriz del sistema Qh = 0, con los coeficientes de H ordenados por
-        filas en h. Cada correspondencia aporta primero la ecuación de u
-        y después la de v.
+    Retorna:
+        Q : numpy.ndarray de tamaño (2*n, 9)
+            Matriz del sistema Qh = 0, con los coeficientes de H ordenados por
+            filas en h. Cada correspondencia aporta primero la ecuación de u
+            y después la de v.
     """
     # Convertimos a arreglos de punto flotante.
     puntos_imagen = np.asarray(imgPts, dtype=float)
@@ -60,7 +58,7 @@ def norma(x: np.ndarray, p: int | str) -> float:
     return suma ** (1 / p)
 
 
-def multMat(A, B):
+def mult_mat(A, B):
     """Recibe A (m, n) y B (n, p).
 
     Devuelve su producto (m, p).
@@ -107,17 +105,17 @@ def calculaLU(A):
         return None, None, 0
 
     # Verificamos que la matriz sea estrictamente bidimensional y cuadrada
-    if np.ndim(matriz_U) != 2 or np.shape(matriz_U)[0] != np.shape(matriz_U)[1]:
+    if matriz_U.ndim != 2 or matriz_U.shape[0] != matriz_U.shape[1]:
         return None, None, 0
 
-    dimension = np.shape(matriz_U)[0]
+    dimension = matriz_U.shape[0]
     matriz_L = np.eye(dimension)
     cant_operaciones = 0
 
     # Aplicamos eliminación gaussiana para construir L (multiplicadores) y escalonar U
     for fila_pivote in range(dimension - 1):
         pivote = matriz_U[fila_pivote][fila_pivote]
-        
+
         # Abortamos si encontramos un cero en la diagonal, ya que no implementamos pivoteo
         if pivote == 0:
             return None, None, 0
@@ -125,12 +123,12 @@ def calculaLU(A):
         for fila_actual in range(fila_pivote + 1, dimension):
             multiplicador = matriz_U[fila_actual][fila_pivote] / pivote
             cant_operaciones += 1
-            
+
             matriz_L[fila_actual][fila_pivote] = multiplicador
             matriz_U[fila_actual][fila_pivote] = 0
-            
+
             matriz_U[fila_actual][fila_pivote + 1:] = matriz_U[fila_actual][fila_pivote + 1:] - multiplicador * matriz_U[fila_pivote][fila_pivote + 1:]
-            
+
             cant_operaciones += 2 * (dimension - fila_pivote - 1)
 
     return matriz_L, matriz_U, cant_operaciones
@@ -163,17 +161,17 @@ def res_tri(A, b, inferior=True):
         return None
 
     # Verificamos que la matriz sea bidimensional y estrictamente cuadrada
-    if np.ndim(matriz_T) != 2 or np.shape(matriz_T)[0] != np.shape(matriz_T)[1]:
-        return None
-    
-    # Verificamos que el término independiente sea un vector unidimensional
-    if np.ndim(vector_b) != 1:
+    if matriz_T.ndim != 2 or matriz_T.shape[0] != matriz_T.shape[1]:
         return None
 
-    dimension = np.shape(matriz_T)[0]
-    
+    # Verificamos que el término independiente sea un vector unidimensional
+    if vector_b.ndim != 1:
+        return None
+
+    dimension = matriz_T.shape[0]
+
     # Chequeamos la compatibilidad de dimensiones entre la matriz y el vector
-    if np.shape(vector_b)[0] != dimension:
+    if vector_b.shape[0] != dimension:
         return None
 
     vector_solucion = np.zeros(dimension)
@@ -188,7 +186,7 @@ def res_tri(A, b, inferior=True):
             suma_parcial = 0.0
             for columna in range(fila):
                 suma_parcial += matriz_T[fila][columna] * vector_solucion[columna]
-            
+
             vector_solucion[fila] = (vector_b[fila] - suma_parcial) / matriz_T[fila][fila]
     else:
         # Resolvemos por sustitución hacia atrás (backward substitution)
@@ -200,7 +198,7 @@ def res_tri(A, b, inferior=True):
             suma_parcial = 0.0
             for columna in range(fila + 1, dimension):
                 suma_parcial += matriz_T[fila][columna] * vector_solucion[columna]
-            
+
             vector_solucion[fila] = (vector_b[fila] - suma_parcial) / matriz_T[fila][fila]
 
     return vector_solucion
@@ -228,7 +226,7 @@ def inversa(A):
     if matriz_L is None or matriz_U is None:
         return None
 
-    dimension = np.shape(matriz_U)[0]
+    dimension = matriz_U.shape[0]
     matriz_inversa = np.zeros((dimension, dimension))
 
     # Construimos la inversa resolviendo el sistema para cada columna de la matriz identidad
@@ -261,7 +259,7 @@ def metpot2k(A, tol = 1e-15, K = 1000):
     Reutilizada del módulo ALC."""
 
     def f(A, v):
-        res = multMat(A, v)
+        res = mult_mat(A, v)
         return res / norma(res, 2)
 
     n = len(A)
@@ -269,16 +267,16 @@ def metpot2k(A, tol = 1e-15, K = 1000):
     v = np.random.rand(n, 1)
     v_moño = f(A, f(A, v))
 
-    e = multMat(v_moño.T, v)
+    e = mult_mat(v_moño.T, v)
 
     k = 0
     while (np.abs(e - 1) > tol) and (k < K):
         v = v_moño
         v_moño = f(A, f(A, v))
-        e = multMat(v_moño.T, v)
+        e = mult_mat(v_moño.T, v)
         k += 1
 
-    autovalor = multMat(v_moño.T, multMat(A, v_moño))
+    autovalor = mult_mat(v_moño.T, mult_mat(A, v_moño))
 
     return (v_moño, autovalor[0][0], k)
 
@@ -303,12 +301,12 @@ def diagRH(A, tol = 1e-15, K = 1000):
     norma_u = norma(u, 2) ** 2
 
     if norma_u > tol:
-        proyeccion = multMat(u, u.T)
+        proyeccion = mult_mat(u, u.T)
         H_v_1 = I - 2 * (proyeccion / norma_u)
     else:
         H_v_1 = I
 
-    B = multMat(H_v_1, multMat(A, H_v_1.T))
+    B = mult_mat(H_v_1, mult_mat(A, H_v_1.T))
     A_moño = B[1:, 1:]
 
     S_moño, D_moño = diagRH(A_moño, tol, K)
@@ -319,7 +317,7 @@ def diagRH(A, tol = 1e-15, K = 1000):
 
     S = np.eye(n)
     S[1:, 1:] = S_moño
-    S = multMat(H_v_1, S)
+    S = mult_mat(H_v_1, S)
 
     return (S, D)
 
@@ -340,7 +338,7 @@ def resolverDLT2D(Q, tol=1e-15, K=1000):
     -------
     H : numpy.ndarray de tamaño (3, 3)
         Homografía del plano del objeto a la imagen, salvo escala.
-        Si Q usa coordenadas normalizadas, H relaciona esas coordenadas 
+        Si Q usa coordenadas normalizadas, H relaciona esas coordenadas
         tenemos que desnormalizarla después.
 
     Resuelve min ||Qh||_2 con ||h||_2=1: h es un autovector asociado
@@ -348,7 +346,7 @@ def resolverDLT2D(Q, tol=1e-15, K=1000):
     """
     # Construimos la matriz simétrica.
     Q = np.asarray(Q, dtype=float)
-    B = multMat(Q.T, Q)
+    B = mult_mat(Q.T, Q)
     S, D = diagRH(B, tol, K)
 
     # Buscamos el menor autovalor.
@@ -430,5 +428,5 @@ def estimarHomografia(imgPts, objPts, tol=1e-15, K=1000):
         [0, 0, 1]])
 
     # Volvemos a las coordenadas originales según la ecuación 14.
-    H = multMat(T_img_inversa, multMat(H_normalizada, T_obj))
+    H = mult_mat(T_img_inversa, mult_mat(H_normalizada, T_obj))
     return H
