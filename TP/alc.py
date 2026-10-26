@@ -76,6 +76,180 @@ def mult_mat(A, B):
 
     return AB
 
+def calculaLU(A):
+    """Calcula la factorización LU de una matriz cuadrada.
+
+    Parámetros
+    ----------
+    A : arreglo de tamaño (n, n)
+        Matriz cuadrada a factorizar.
+
+    Retorna
+    -------
+    matriz_L : numpy.ndarray de tamaño (n, n)
+        Matriz triangular inferior con unos en la diagonal principal.
+        Retorna None si la matriz no cumple los requisitos o hay ceros en la diagonal.
+    matriz_U : numpy.ndarray de tamaño (n, n)
+        Matriz triangular superior escalonada.
+        Retorna None si la matriz no cumple los requisitos o hay ceros en la diagonal.
+    cant_operaciones : int
+        Cantidad de operaciones elementales realizadas. Retorna 0 si el proceso falla.
+    """
+    if A is None:
+        return None, None, 0
+
+    # Intentamos convertir la entrada a un array de floats; si los tipos son incompatibles, abortamos
+    try:
+        matriz_U = np.array(A, dtype=float)
+    except:
+        return None, None, 0
+
+    # Verificamos que la matriz sea estrictamente bidimensional y cuadrada
+    if matriz_U.ndim != 2 or matriz_U.shape[0] != matriz_U.shape[1]:
+        return None, None, 0
+
+    dimension = matriz_U.shape[0]
+    matriz_L = np.eye(dimension)
+    cant_operaciones = 0
+
+    # Aplicamos eliminación gaussiana para construir L (multiplicadores) y escalonar U
+    for fila_pivote in range(dimension - 1):
+        pivote = matriz_U[fila_pivote][fila_pivote]
+
+        # Abortamos si encontramos un cero en la diagonal, ya que no implementamos pivoteo
+        if pivote == 0:
+            return None, None, 0
+
+        for fila_actual in range(fila_pivote + 1, dimension):
+            multiplicador = matriz_U[fila_actual][fila_pivote] / pivote
+            cant_operaciones += 1
+
+            matriz_L[fila_actual][fila_pivote] = multiplicador
+            matriz_U[fila_actual][fila_pivote] = 0
+
+            matriz_U[fila_actual][fila_pivote + 1:] = matriz_U[fila_actual][fila_pivote + 1:] - multiplicador * matriz_U[fila_pivote][fila_pivote + 1:]
+
+            cant_operaciones += 2 * (dimension - fila_pivote - 1)
+
+    return matriz_L, matriz_U, cant_operaciones
+
+
+def res_tri(A, b, inferior=True):
+    """Resuelve el sistema Ax = b cuando A es triangular inferior o superior.
+
+    Parámetros
+    ----------
+    A : arreglo de tamaño (n, n)
+        Matriz del sistema, debe ser triangular.
+    b : arreglo de tamaño (n,)
+        Vector de términos independientes.
+    inferior : bool, opcional
+        Indica si la matriz es triangular inferior (True) o superior (False).
+        Por defecto es True.
+
+    Retorna
+    -------
+    vector_solucion : numpy.ndarray de tamaño (n,)
+        Vector con la solución del sistema. Retorna None si las dimensiones
+        no son compatibles o si la matriz es singular.
+    """
+    # Intentamos convertir las entradas a arrays numéricos; abortamos si los tipos son incompatibles
+    try:
+        matriz_T = np.array(A, dtype=float)
+        vector_b = np.array(b, dtype=float)
+    except:
+        return None
+
+    # Verificamos que la matriz sea bidimensional y estrictamente cuadrada
+    if matriz_T.ndim != 2 or matriz_T.shape[0] != matriz_T.shape[1]:
+        return None
+
+    # Verificamos que el término independiente sea un vector unidimensional
+    if vector_b.ndim != 1:
+        return None
+
+    dimension = matriz_T.shape[0]
+
+    # Chequeamos la compatibilidad de dimensiones entre la matriz y el vector
+    if vector_b.shape[0] != dimension:
+        return None
+
+    vector_solucion = np.zeros(dimension)
+
+    if inferior:
+        # Resolvemos por sustitución hacia adelante (forward substitution)
+        for fila in range(dimension):
+            # Si encontramos un cero en la diagonal, la matriz es singular (no tiene solución única)
+            if matriz_T[fila][fila] == 0:
+                return None
+
+            suma_parcial = 0.0
+            for columna in range(fila):
+                suma_parcial += matriz_T[fila][columna] * vector_solucion[columna]
+
+            vector_solucion[fila] = (vector_b[fila] - suma_parcial) / matriz_T[fila][fila]
+    else:
+        # Resolvemos por sustitución hacia atrás (backward substitution)
+        for fila in range(dimension - 1, -1, -1):
+            # Si encontramos un cero en la diagonal, la matriz es singular (no tiene solución única)
+            if matriz_T[fila][fila] == 0:
+                return None
+
+            suma_parcial = 0.0
+            for columna in range(fila + 1, dimension):
+                suma_parcial += matriz_T[fila][columna] * vector_solucion[columna]
+
+            vector_solucion[fila] = (vector_b[fila] - suma_parcial) / matriz_T[fila][fila]
+
+    return vector_solucion
+
+
+def inversa(A):
+    """Calcula la inversa de A mediante su factorización LU.
+
+    Parámetros
+    ----------
+    A : arreglo de tamaño (n, n)
+        Matriz cuadrada a invertir.
+
+    Retorna
+    -------
+    matriz_inversa : numpy.ndarray de tamaño (n, n)
+        Matriz inversa calculada resolviendo sistemas triangulares.
+        Retorna None si la factorización falla o la matriz es singular.
+    """
+    # Obtenemos la descomposición LU de la matriz original
+    resultado_lu = calculaLU(A)
+    matriz_L, matriz_U, _ = resultado_lu
+
+    # Verificamos que la matriz haya podido factorizarse correctamente
+    if matriz_L is None or matriz_U is None:
+        return None
+
+    dimension = matriz_U.shape[0]
+    matriz_inversa = np.zeros((dimension, dimension))
+
+    # Construimos la inversa resolviendo el sistema para cada columna de la matriz identidad
+    for columna in range(dimension):
+        # Generamos el vector de la base canónica (e_j) correspondiente a la columna actual
+        vector_canonico = np.zeros(dimension)
+        vector_canonico[columna] = 1.0
+
+        # Resolvemos el sistema triangular inferior L * y = e_j
+        vector_y = res_tri(matriz_L, vector_canonico)
+        if vector_y is None:
+            return None
+
+        # Resolvemos el sistema triangular superior U * x = y
+        columna_inversa = res_tri(matriz_U, vector_y, inferior=False)
+        if columna_inversa is None:
+            return None
+
+        # Acoplamos el vector resultante como columna en la matriz inversa final
+        matriz_inversa[:, columna] = columna_inversa
+
+    return matriz_inversa
+
 
 def metpot2k(A, tol = 1e-15, K = 1000):
     """Recibe A simétrica, tolerancia tol y máximo K de iteraciones.

@@ -339,18 +339,9 @@ def norma(x, p):
     Retorna:
         El valor de la norma de x.
     """
-    res = 0
-    max_abs = 0
-
     if p == 'inf':
-        for i in x:
-            if np.abs(i) > max_abs: max_abs = abs(i)
-        return max_abs
-
-    for i in x:
-        res += abs(i) ** p
-
-    return res ** (1 / p)
+        return np.max(np.abs(x))
+    return np.sum(np.abs(x) ** p) ** (1 / p)
 
 
 def normaliza(X, p):
@@ -365,7 +356,7 @@ def normaliza(X, p):
     return [x / norma(x, p) for x in X]
 
 
-def normaMatMC(A, q, p, Np):
+def normaMatMC(A: np.ndarray, q: int | str, p: int | str, Np: int) -> tuple[float, np.ndarray]:
     """Estima por Monte Carlo la norma matricial inducida de A.
 
     Parámetros:
@@ -374,10 +365,14 @@ def normaMatMC(A, q, p, Np):
         p: orden de la norma de los vectores de entrada.
         Np: cantidad de vectores aleatorios a probar.
     Retorna:
-        La mayor norma q de A aplicada a los vectores probados con norma p uno.
+        La mayor norma q encontrada y el vector de norma p uno que la produjo.
+        Es una estimación por muestreo; no garantiza el máximo global.
+        Se supone Np positivo y al menos una columna en A.
     """
     res = 0
     m = A.shape[1]
+    vector_maximo = np.zeros(m)
+    hay_vector = False
     for _ in range(Np):
         v = np.zeros(m)
         for i in range(m):
@@ -391,9 +386,12 @@ def normaMatMC(A, q, p, Np):
         Av = mult_mat_vector(A, v)
         normaAv = norma(Av, q)
 
-        if normaAv > res:
+        # Conservamos también la primera muestra válida si A es la matriz nula.
+        if normaAv > res or not hay_vector:
             res = normaAv
-    return res
+            vector_maximo = v
+            hay_vector = True
+    return res, vector_maximo
 
 
 def normaExacta(A, p=[1, 'inf']):
@@ -440,15 +438,17 @@ def condMC(A, p):
     Retorna:
         La estimación del número de condición, o None si A no es invertible.
     """
-    Np = 100
+    Np = 1000
     A_inversa = inversa(A)
     if A_inversa is None:
         return None
 
-    return normaMatMC(A, p, p, Np) * normaMatMC(A_inversa, p, p, Np)
+    norma_A = normaMatMC(A, p, p, Np)[0]
+    norma_A_inversa = normaMatMC(A_inversa, p, p, Np)[0]
+    return norma_A * norma_A_inversa
 
 
-def condExacta(A, p=[1, 'inf']):
+def condExacto(A, p):
     """Calcula el número de condición de A usando la norma indicada.
 
     Parámetros:
