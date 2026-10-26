@@ -3,16 +3,16 @@ import numpy as np
 ############ LABO 0 ############
 
 def esCuadrada(A):
-    cant_filas, cant_columnas = A.shape
-    return cant_filas == cant_columnas
+    filas, columnas = A.shape
+    return filas == columnas
 
 
 def diagonal(A):
-    cant_filas, cant_columnas = A.shape
+    filas, columnas = A.shape
 
     D = A.copy()
-    for i in range(cant_filas):
-        for j in range(cant_columnas):
+    for i in range(filas):
+        for j in range(columnas):
             if i != j:
                 D[i][j] = 0
     return D
@@ -27,12 +27,12 @@ def traza(A):
 
 def traspuesta(A):
     At = []
-    cant_filas, cant_columnas = A.shape
+    filas, columnas = A.shape
 
-    for i in range(cant_columnas):
+    for i in range(columnas):
         nueva_fila = []
 
-        for j in range(cant_filas):
+        for j in range(filas):
             nueva_fila.append(A[j][i])
 
         At.append(nueva_fila)
@@ -41,10 +41,10 @@ def traspuesta(A):
 
 
 def esSimetrica(A):
-    cant_filas, cant_columnas = A.shape
+    filas, columnas = A.shape
 
-    for i in range(cant_filas):
-        for j in range(cant_columnas):
+    for i in range(filas):
+        for j in range(columnas):
             if i != j:
                 if A[i][j] != A[j][i]:
                     return False
@@ -80,7 +80,7 @@ def matricesIguales(A, B):
 
 def rota(theta):
     return np.array([[np.cos(theta), -np.sin(theta)],
-                    [np.sin(theta), np.cos(theta)]])
+                     [np.sin(theta), np.cos(theta)]])
 
 
 def escala(s):
@@ -104,7 +104,7 @@ def afin(theta, s, b):
     T[:2, :2] = T_lineal
     T[:2, 2] = b
     return T
-                 
+                
 
 def trans_afin(v, theta, s, b):
     T = afin(theta, s, b)
@@ -118,33 +118,39 @@ def trans_afin(v, theta, s, b):
 ################ LABO 3 #################
 
 def norma(x: np.ndarray, p: int | str) -> float:
-    if p == 1:
-        return sum([abs(n) for n in x])
-
-    elif p == "inf":
-        max = 0
-        for n in x:
-            if abs(n) > max:
-                max = abs(n)
-        return max
-
-    suma = sum([n**p for n in x])
-    return np.power(suma, 1 / p)
+    """ Devuelve la norma p del vector x """
+    if p == 'inf':
+        return np.max(np.abs(x))
+    return np.sum(np.abs(x)**p)**(1/p)
 
 def normaliza(X: list[np.ndarray], p: int) -> list[np.ndarray]:
+    """ Devuelve la lista de vectores recibidos normalizados """
     return [x / norma(x, p) for x in X]
 
-# def normaMatMC(A, q, p, Np):
-#     """
-#     Devuelve la norma A-{q,p} y el vector x en el cual se alcanza
-#     el maximo.
-#     """
-#     vectoresAlAzar = np.random.rand(Np, A.shape[1])
-#     vectoresNormalizados = normaliza(vectoresAlAzar, p)
-#     vectorConNorma = map(lambda x: [norma(A@x, q), x], vectoresNormalizados)
-#     return max(vectorConNorma, key=lambda p: p[0])
+
+def normaMatMC(A: np.ndarray, q: int | str, p: int | str, Np: int) -> tuple[float, np.ndarray]:
+    """ 
+    Devuelve la norma A-{q,p} y el vector x en el cual se alcanza el maximo.
+    """
+    max_norma = 0.0
+    vector_maximo = np.zeros(A.shape[1])
+    
+    for _ in range(Np):
+        v = np.random.randn(A.shape[1])
+        v_normalizado = v / norma(v, p)
+        
+        norma_candidata = norma(A @ v_normalizado, q)
+        
+        if norma_candidata > max_norma:
+            max_norma = norma_candidata
+            vector_maximo = v_normalizado
+            
+    return max_norma, vector_maximo
 
 def normaExacta(A: np.ndarray, p = [1, "inf"]):
+    """
+    Devuelve una lista con las normas 1 e infinito de una matriz A
+    """
     def normaM(A: np.ndarray, p: int | str) -> float:
         if p == "inf":
             sumas_inf = np.zeros(A.shape[0]) 
@@ -168,11 +174,23 @@ def normaExacta(A: np.ndarray, p = [1, "inf"]):
 
     return None
 
-def condMC(A: np.ndarray, p: int) -> float:
-    ...
+def condMC(A, p):
+    """
+    Devuelve el numero de condicion de A usando la norma inducida p.
+    """
+    norma_matriz = normaMatMC(A, p, p, 1000)[0]
+    matriz_inversa = np.linalg.inv(A)
+    norma_inversa = normaMatMC(matriz_inversa, p, p, 1000)[0]
+    return norma_matriz * norma_inversa
 
-def condExacto(A: np.ndarray, p: int) -> float:
-    ...
+def condExacto(A, p):
+    """
+    Devuelve el numero de condicion 1 o infinito de A
+    """
+    norma_matriz = normaExacta(A, p)
+    matriz_inversa = np.linalg.inv(A)
+    norma_inversa = normaExacta(matriz_inversa, p)
+    return norma_matriz * norma_inversa
 
 ################# LABO 4 #################
 
