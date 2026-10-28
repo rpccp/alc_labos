@@ -37,6 +37,47 @@ def obtenerQ2d(imgPts, objPts):
 
     return Q
 
+def obtenerQ3d(imgPts, objPts):
+    """Construye la matriz Q del DLT 3D (ecuación 6 del enunciado).
+
+    Parámetros:
+        imgPts : arreglo de tamaño (n, 2)
+            Coordenadas (u, v) de los puntos en la imagen, en píxeles.
+        objPts : arreglo de tamaño (n, 3)
+            Coordenadas cartesianas (U, V, W) de los puntos en el mundo real.
+            La fila i corresponde al mismo punto en ambos arreglos.
+
+    Retorna:
+        Q : numpy.ndarray de tamaño (2*n, 12)
+            Matriz del sistema Qm = 0, con los coeficientes de M ordenados por
+            filas en m. Cada correspondencia aporta primero la ecuación de u
+            y después la de v.
+    """
+    # Verificamos que las dimensiones y cantidades coincidan
+    cantidad_puntos = np.shape(imgPts)[0]
+    
+    if np.shape(objPts)[0] != cantidad_puntos:
+        return None
+    if np.shape(imgPts)[1] != 2 or np.shape(objPts)[1] != 3:
+        return None
+
+    # Convertimos a arreglos de punto flotante para evitar errores de tipo
+    puntos_imagen = np.asarray(imgPts, dtype=float)
+    puntos_objeto = np.asarray(objPts, dtype=float)
+
+    # Inicializamos Q con ceros
+    Q = np.zeros((2 * cantidad_puntos, 12))
+
+    # Apilamos las dos ecuaciones de cada correspondencia según la ecuación 6
+    for indice in range(cantidad_puntos):
+        u, v = puntos_imagen[indice]
+        U, V, W = puntos_objeto[indice]
+
+        Q[2 * indice]     = [U, V, W, 1, 0, 0, 0, 0, -u * U, -u * V, -u * W, -u]
+        Q[2 * indice + 1] = [0, 0, 0, 0, U, V, W, 1, -v * U, -v * V, -v * W, -v]
+
+    return Q
+
 
 def norma(x: np.ndarray, p: int | str) -> float:
     """Recibe un vector x y un número p, admite p numérico o "inf".
