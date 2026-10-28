@@ -1,5 +1,3 @@
-import random
-
 import numpy as np
 
 
@@ -183,20 +181,24 @@ def traspuesta(A):
     return np.array(At)
 
 
-def esSimetrica(A):
+def esSimetrica(A, tol=0):
     """Indica si A es simétrica.
 
     Parámetros:
         A: matriz cuadrada representada como un array bidimensional.
+        tol: tolerancia absoluta para comparar entradas simétricas.
+            Por defecto es cero, para comparar exactamente.
     Retorna:
-        True si A coincide con su traspuesta; False en caso contrario.
+        True si A coincide con su traspuesta dentro de tol; False en caso contrario.
     """
     filas, columnas = A.shape
+    if filas != columnas:
+        return False
 
     for i in range(filas):
         for j in range(columnas):
             if i != j:
-                if A[i, j] != A[j, i]:
+                if abs(A[i, j] - A[j, i]) > tol:
                     return False
 
     return True
@@ -211,7 +213,7 @@ def error(x, y):
     Retorna:
         El valor absoluto de la diferencia entre x e y.
     """
-    return np.abs(np.float32(x) - np.float32(y))
+    return abs(np.float32(x) - np.float32(y))
 
 
 def error_relativo(x, y):
@@ -223,7 +225,7 @@ def error_relativo(x, y):
     Retorna:
         El error absoluto entre ambos valores dividido por el valor absoluto de x.
     """
-    return error(x, y) / np.abs(x)
+    return error(x, y) / abs(x)
 
 
 def matricesIguales(A, B):
@@ -340,8 +342,15 @@ def norma(x, p):
         El valor de la norma de x.
     """
     if p == 'inf':
-        return np.max(np.abs(x))
-    return np.sum(np.abs(x) ** p) ** (1 / p)
+        maximo = 0
+        for valor in x.reshape(-1):
+            if abs(valor) > maximo:
+                maximo = abs(valor)
+        return maximo
+    suma = 0
+    for valor in x.reshape(-1):
+        suma += abs(valor) ** p
+    return suma ** (1 / p)
 
 
 def normaliza(X, p):
@@ -356,7 +365,7 @@ def normaliza(X, p):
     return [x / norma(x, p) for x in X]
 
 
-def normaMatMC(A: np.ndarray, q: int | str, p: int | str, Np: int) -> tuple[float, np.ndarray]:
+def normaMatMC(A, q, p, Np):
     """Estima por Monte Carlo la norma matricial inducida de A.
 
     Parámetros:
@@ -376,7 +385,7 @@ def normaMatMC(A: np.ndarray, q: int | str, p: int | str, Np: int) -> tuple[floa
     for _ in range(Np):
         v = np.zeros(m)
         for i in range(m):
-            v[i] = random.uniform(-1.0, 1.0)
+            v[i] = np.random.uniform(-1.0, 1.0)
         normaV = norma(v, p)
 
         if normaV == 0:
@@ -413,13 +422,13 @@ def normaExacta(A, p=[1, 'inf']):
     for row in range(filas):
         suma_fila = 0
         for col in range(columnas):
-            suma_fila += np.abs(A[row, col])
+            suma_fila += abs(A[row, col])
         if suma_fila > normaInf: normaInf = suma_fila
 
     for col in range(columnas):
         suma_col = 0
         for row in range(filas):
-            suma_col += np.abs(A[row, col])
+            suma_col += abs(A[row, col])
         if suma_col > norma1: norma1 = suma_col
 
     if p == 1:
@@ -703,10 +712,10 @@ def QR_con_GS(A, tol=1e-12, retorna_nops=False):
 
 def QR_con_HH(A, tol=1e-12, extras=False):
     """
-    A una matriz de m x n (m>=n)
+    A una matriz de m x n.
     tol la tolerancia para considerar nulo el vector que define Householder.
     retorna matrices Q y R calculadas con reflexiones de Householder
-    Si la matriz A no cumple m>=n, debe retornar None
+    Admite tanto m>=n como m<n.
     extras : bool, opcional
         Si es True, devuelve informacion extra sobre el proceso de factorizacion.
         Por defecto es False. Esto lo hacemos para poder graficar el proceso.
@@ -715,13 +724,12 @@ def QR_con_HH(A, tol=1e-12, extras=False):
         Q, R, extra_info (si extras es True)
         Q, R (si extras es False)
     Q tiene tamaño (m, m) y R tiene tamaño (m, n), con A = QR.
+    La diagonal de R se devuelve no negativa.
     extra_info es un diccionario con la clave:
         'R_matrices': lista de las matrices R en cada paso
         'Q_matrices': lista de las matrices Q en cada paso
     """
     filas, columnas = A.shape
-    if filas < columnas:
-        return None
 
     R = copiar_matriz(A)
 
@@ -732,7 +740,7 @@ def QR_con_HH(A, tol=1e-12, extras=False):
         'Q_matrices': []
     }
 
-    for k in range(columnas):
+    for k in range(min(filas, columnas)):
         if extras:
             extra_info['R_matrices'].append(copiar_matriz(R))
             extra_info['Q_matrices'].append(copiar_matriz(Q))
@@ -760,6 +768,12 @@ def QR_con_HH(A, tol=1e-12, extras=False):
             R = mult_mat(H_kp, R)
             Q = mult_mat(Q, H_kp)
 
+    # Cambiar ambos signos conserva Q R y hace no negativa la diagonal de R.
+    for k in range(min(filas, columnas)):
+        if R[k, k] < 0:
+            R[k, :] = -R[k, :]
+            Q[:, k] = -Q[:, k]
+
     if extras:
         extra_info['R_matrices'].append(copiar_matriz(R))
         extra_info['Q_matrices'].append(copiar_matriz(Q))
@@ -770,7 +784,7 @@ def QR_con_HH(A, tol=1e-12, extras=False):
 
 def calculaQR(A, metodo="RH", tol=1e-12):
     if metodo == "GS":
-        return QR_con_GS(A, tol)
+        return GS(A, tol, retorna_nops=False)
     elif metodo == "RH":
         return QR_con_HH(A, tol)
     else:
@@ -778,35 +792,86 @@ def calculaQR(A, metodo="RH", tol=1e-12):
 
 
 def metpot2k(A, tol=1e-15, K=1000):
-    def f(A, v):
-        res = mult_mat(A, v)
-        return res / norma(res, 2)
+    """Aplica dos pasos de potencia por iteración, hasta tol o K iteraciones.
 
-    n = len(A)
+    Parámetros:
+        A: matriz real cuadrada.
+        tol: tolerancia sobre |v_nuevo.T v_anterior - 1|.
+        K: máximo de iteraciones dobles.
+    Retorna:
+        Vector unitario v de forma (n,), cociente de Rayleigh lambda y número
+        de iteraciones. Si Av=0 devuelve v y lambda=0 sin dividir por cero.
+    """
+    A = np.array(A, dtype=float)
+    v = np.random.rand(A.shape[0], 1)
+    v = v / norma(v, 2)
+    iteraciones = 0
 
-    v = np.random.rand(n, 1)
-    v_moño = f(A, f(A, v))
+    for paso in range(int(K)):
+        # Primer paso: una imagen nula identifica un autovector de autovalor cero.
+        Av = mult_mat(A, v)
+        norma_Av = norma(Av, 2)
+        if norma_Av == 0:
+            return v[:, 0], 0.0, iteraciones
+        intermedio = Av / norma_Av
 
-    e = mult_mat(v_moño.T, v)
+        # Segundo paso: también se contempla A^2 v=0 con Av distinto de cero.
+        siguiente = mult_mat(A, intermedio)
+        norma_siguiente = norma(siguiente, 2)
+        if norma_siguiente == 0:
+            return intermedio[:, 0], 0.0, paso + 1
+        siguiente = siguiente / norma_siguiente
+        error = abs(producto_interno(siguiente[:, 0], v[:, 0]) - 1)
+        v = siguiente
+        iteraciones = paso + 1
+        if error <= tol:
+            break
 
-    k = 0
-    while (np.abs(e - 1) > tol) and (k < K):
-        v = v_moño
-        v_moño = f(A, f(A, v))
-        e = mult_mat(v_moño.T, v)
-        k += 1
-
-    autovalor = mult_mat(v_moño.T, mult_mat(A, v_moño))
-
-    return (v_moño, autovalor[0][0], k)
+    Av = mult_mat(A, v)
+    autovalor = producto_interno(v[:, 0], Av[:, 0])
+    norma_Av = norma(Av, 2)
+    residuo = norma(Av - autovalor * v, 2)
+    # A^2 puede estabilizar una mezcla de autovectores de +lambda y -lambda.
+    # Solo si se estabilizó la dirección pero no satisface Av=lambda*v,
+    # proyectamos esa mezcla sobre uno de los dos autoespacios.
+    if iteraciones and error <= tol and norma_Av > 0:
+        if residuo > 10 * tol ** 0.5 * norma_Av:
+            candidato = v + Av / norma_Av
+            norma_candidato = norma(candidato, 2)
+            if norma_candidato > 0:
+                v = candidato / norma_candidato
+                Av = mult_mat(A, v)
+                autovalor = producto_interno(v[:, 0], Av[:, 0])
+    return v[:, 0], autovalor, iteraciones
 
 
 def diagRH(A, tol=1e-15, K=1000):
+    """Diagonaliza A simétrica mediante potencia y reflexiones de Householder.
+
+    Parámetros:
+        A: matriz real cuadrada y simétrica.
+        tol: tolerancia de potencia y comprobación numérica de simetría.
+        K: máximo de iteraciones dobles de potencia por autovector.
+    Retorna:
+        S y D, con A aproximadamente S D S.T; None si A no es simétrica.
+    """
+    A = np.array(A, dtype=float)
+    if A.ndim != 2 or A.shape[0] != A.shape[1]:
+        return None
     n = len(A)
-    if n == 1:
-        return np.eye(1), A
+    if n <= 1:
+        return np.eye(n), np.array(A)
+    escala = norma(A, 'inf')
+    if not esSimetrica(A, tol * max(1.0, escala)):
+        return None
+    if escala == 0:
+        return np.eye(n), np.zeros((n, n))
 
     v_1, lambda_1, _ = metpot2k(A, tol, K)
+    v_1 = v_1.reshape((n, 1))
+    # El signo del autovector es libre; esta elección evita e1-v casi nulo.
+    if v_1[0, 0] > 0:
+        v_1 = -v_1
 
     I = np.eye(n, n)
     e_1 = I[:, [0]]
@@ -820,6 +885,8 @@ def diagRH(A, tol=1e-15, K=1000):
         H_v_1 = I
 
     B = mult_mat(H_v_1, mult_mat(A, H_v_1.T))
+    # Recuperamos la simetría que puede perderse por redondeo en los productos.
+    B = (B + B.T) / 2
     A_moño = B[1:, 1:]
 
     S_moño, D_moño = diagRH(A_moño, tol, K)
@@ -845,8 +912,23 @@ def matriz(n):
 
 
 def normalizarFilas(T):
+    """Normaliza las filas de una matriz de pesos de transición.
+
+    Parámetros:
+        T: matriz cuadrada de pesos no negativos; se modifica en el lugar.
+    Retorna:
+        T con filas que suman uno. Si una fila no tiene salidas, agrega
+        un lazo al mismo estado antes de normalizar. Así, al trasponer,
+        no quedan columnas nulas.
+    """
     for i in range(0, len(T)):
-        T[i] = T[i] / np.sum(T[i])
+        suma = 0
+        for j in range(T.shape[1]):
+            suma += T[i, j]
+        if suma == 0:
+            T[i, i] = 1
+            suma = 1
+        T[i] = T[i] / suma
 
     return T
 
@@ -872,16 +954,17 @@ def transiciones_al_azar_uniformes(n, thres):
     El elemento i,j es distinto de cero si el número generado al azar para i,j es menor o igual a thres. 
     Todos los elementos de la columna $j$ son iguales 
     (a 1 sobre el número de elementos distintos de cero en la columna).
+    Si un estado queda sin salidas, se agrega una transición a sí mismo.
     """
 
     T = matriz(n)
 
     for i in range(0, n):
         for j in range(0, n):
-            if T[i, j] < thres:
-                T[i, j] = 0
-            else:
+            if T[i, j] <= thres:
                 T[i, j] = 1
+            else:
+                T[i, j] = 0
 
     T = normalizarFilas(T)
 
@@ -906,10 +989,37 @@ def nucleo(A, tol=1e-15):
     nucleo = []
 
     for j in range(0, len(D)):
-        if np.abs(D[j, j]) < tol:
+        if abs(D[j, j]) <= tol:
             nucleo.append(S[:, j])
 
     return np.array(nucleo).T
+
+
+def puntos_fijos(T, tol):
+    """Calcula una base de puntos fijos de una matriz de transición.
+
+    Parámetros:
+        T: matriz de transición de tamaño (n, n); no se modifica.
+        tol: tolerancia utilizada por nucleo para detectar autovalores nulos.
+    Retorna:
+        Matriz de tamaño (n, k) cuyas columnas son puntos fijos independientes,
+        normalizados con norma 1 igual a uno. Se orientan con suma no negativa;
+        una base del núcleo puede contener componentes de signos distintos.
+    """
+    n = T.shape[0]
+    P = nucleo(T - np.eye(n), tol)
+    if P.size == 0:
+        return np.zeros((n, 0))
+
+    for j in range(P.shape[1]):
+        P[:, j] = P[:, j] / norma(P[:, j], 1)
+        suma = 0
+        for i in range(n):
+            suma += P[i, j]
+        if suma < 0:
+            P[:, j] = -P[:, j]
+
+    return P
 
 
 def crea_rala(listado, m_filas, n_columnas, tol=1e-15):
@@ -928,7 +1038,7 @@ def crea_rala(listado, m_filas, n_columnas, tol=1e-15):
         return [rala, (m_filas, n_columnas)]
 
     for i in range(0, len(listado[0])):
-        if not np.abs(listado[2][i]) < tol:
+        if not abs(listado[2][i]) < tol:
             rala[(listado[0][i], listado[1][i])] = listado[2][i]
 
     return [rala, (m_filas, n_columnas)]
@@ -937,15 +1047,15 @@ def crea_rala(listado, m_filas, n_columnas, tol=1e-15):
 def multiplica_rala_vector(A, v):
     """
     Recibe una matriz rala creada con crea_rala y un vector v. 
-    Retorna un vector w resultado de multiplicar A con v
+    Retorna un vector w de longitud m_filas, resultado de multiplicar A con v.
     """
-    w = np.zeros(shape=len(v))
+    w = np.zeros(A[1][0])
     R = A[0]
 
     for (i, j) in R:
         w[i] += v[j] * R[(i, j)]
 
-    return np.array([w])
+    return w
 
 
 def svd_reducida(A, k="max", tol=1e-15):
@@ -967,8 +1077,8 @@ def svd_reducida(A, k="max", tol=1e-15):
 
     Sigma = []
     for i in range(min(n, m)):
-        if np.abs(Sigma2[i, i]) > tol:
-            Sigma.append(np.sqrt(Sigma2[i, i]))
+        if abs(Sigma2[i, i]) > tol:
+            Sigma.append(Sigma2[i, i] ** 0.5)
 
     r = len(Sigma)
 
