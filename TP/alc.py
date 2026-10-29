@@ -2,6 +2,54 @@
 
 import numpy as np
 
+def traspuesta(A):
+    """Calcula la traspuesta de A.
+
+    Parámetros:
+        A: matriz representada como un array bidimensional.
+    Retorna:
+        Una matriz con filas y columnas intercambiadas.
+    """
+    At = []
+    filas, columnas = A.shape
+
+    for i in range(columnas):
+        nueva_fila = []
+
+        for j in range(filas):
+            nueva_fila.append(A[j, i])
+
+        At.append(nueva_fila)
+
+    return np.array(At)
+
+def resolverDLT3D(Q):
+    """Resuelve el sistema Qm = 0 para encontrar la matriz de proyección M.
+
+    Parámetros:
+        Q : numpy.ndarray de tamaño (2*n, 12)
+            Matriz de diseño del sistema obtenida a partir de las correspondencias 2D-3D.
+
+    Retorna:
+        M : numpy.ndarray de tamaño (3, 4)
+            Matriz de proyección de la cámara calculada mediante cuadrados mínimos.
+    """
+    Qt = traspuesta(Q)
+    QtQ = mult_mat(Qt, Q)
+    
+    # Calculamos autovectores (S) y autovalores (D) de QtQ.
+    # Las columnas de S equivalen a la matriz V de la SVD de Q.
+    S, D = diagRH(QtQ)
+    
+    # El vector que minimiza el error es el autovector asociado al menor autovalor.
+   
+    # Como diagRH los ordena de mayor a menor, extraemos la última columna.
+    m = S[:, -1]
+    
+    # Reorganizamos el vector de 12 elementos en la matriz de la cámara de 3x4.
+    M = m.reshape((3, 4))
+    
+    return M
 
 def obtenerQ2d(imgPts, objPts):
     """Construye la matriz Q del DLT coplanar (ecuación 11 del enunciado).
