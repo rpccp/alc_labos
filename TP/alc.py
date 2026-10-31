@@ -655,3 +655,65 @@ def armarA(Hlst):
         A[2 * i] = restriccion(H, 0, 1)
         A[2 * i + 1] = restriccion(H, 0, 0) - restriccion(H, 1, 1)
     return A
+
+
+def calculaCholesky(A, atol=1e-15):
+    """Calcula la factorización de Cholesky sin modificar A.
+
+    Parámetros:
+        A: matriz simétrica de tamaño (n, n).
+        atol: tolerancia para considerar positivo cada pivote.
+    Retorna:
+        L triangular inferior tal que A=L L.T, o None si un pivote es
+        menor o igual a atol.
+    """
+    n = A.shape[0]
+    L = np.zeros((n, n))
+    # Cada entrada usa solo columnas anteriores de L ya calculadas.
+    for i in range(n):
+        for j in range(i + 1):
+            suma = 0.0
+            for k in range(j):
+                suma += L[i, k] * L[j, k]
+            if i == j:
+                pivote = A[i, i] - suma
+                if pivote <= atol:
+                    return None
+                L[i, j] = pivote ** 0.5
+            else:
+                L[i, j] = (A[i, j] - suma) / L[j, j]
+    return L
+
+
+def calcularMatrizK2D(A):
+    """Recupera la matriz intrínseca de la calibración coplanar.
+
+    Parámetros:
+        A: matriz de tamaño (2*N, 6) construida por armarA, con al menos
+            tres homografías que aporten restricciones independientes.
+    Retorna:
+        K de tamaño (3, 3), triangular superior y normalizada con K[2,2]=1,
+        o None si ninguno de los signos de B permite Cholesky.
+
+    Resuelve el sistema homogéneo Ab=0 por el menor autovalor de A.T A,
+    elige el signo definido positivo de B y usa B=L L.T, K=(L.T)^-1.
+    """
+
+    S, D = diagRH(mult_mat(A.T, A))
+    minimo = 0
+    for i in range(1, 6):
+        if D[i, i] < D[minimo, minimo]:
+            minimo = i
+    b = S[:, minimo]
+    B = np.array([[b[0], b[1], b[3]],
+                  [b[1], b[2], b[4]],
+                  [b[3], b[4], b[5]]])
+
+    # Solo uno de los signos puede dar una matriz definida positiva.
+    L = calculaCholesky(B)
+    if L is None:
+        L = calculaCholesky(-B)
+    if L is None:
+        return None
+    K = inversa(L.T)
+    return K / K[2, 2]
