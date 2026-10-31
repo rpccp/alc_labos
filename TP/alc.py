@@ -23,34 +23,6 @@ def traspuesta(A):
 
     return np.array(At)
 
-def resolverDLT3D(Q):
-    """Resuelve el sistema Qm = 0 para encontrar la matriz de proyección M.
-
-    Parámetros:
-        Q : numpy.ndarray de tamaño (2*n, 12)
-            Matriz de diseño del sistema obtenida a partir de las correspondencias 2D-3D.
-
-    Retorna:
-        M : numpy.ndarray de tamaño (3, 4)
-            Matriz de proyección de la cámara calculada mediante cuadrados mínimos.
-    """
-    Qt = traspuesta(Q)
-    QtQ = mult_mat(Qt, Q)
-    
-    # Calculamos autovectores (S) y autovalores (D) de QtQ.
-    # Las columnas de S equivalen a la matriz V de la SVD de Q.
-    S, D = diagRH(QtQ)
-    
-    # El vector que minimiza el error es el autovector asociado al menor autovalor.
-   
-    # Como diagRH los ordena de mayor a menor, extraemos la última columna.
-    m = S[:, -1]
-    
-    # Reorganizamos el vector de 12 elementos en la matriz de la cámara de 3x4.
-    M = m.reshape((3, 4))
-    
-    return M
-
 def obtenerQ2d(imgPts, objPts):
     """Construye la matriz Q del DLT coplanar (ecuación 11 del enunciado).
 
@@ -126,6 +98,122 @@ def obtenerQ3d(imgPts, objPts):
 
     return Q
 
+def resolverDLT3D(Q):
+    """Resuelve el sistema Qm = 0 para encontrar la matriz de proyección M.
+
+    Parámetros:
+        Q : numpy.ndarray de tamaño (2*n, 12)
+            Matriz de diseño del sistema obtenida a partir de las correspondencias 2D-3D.
+
+    Retorna:
+        M : numpy.ndarray de tamaño (3, 4)
+            Matriz de proyección de la cámara calculada mediante cuadrados mínimos.
+    """
+    Qt = traspuesta(Q)
+    QtQ = mult_mat(Qt, Q)
+    
+    # Calculamos autovectores (S) y autovalores (D) de QtQ.
+    # Las columnas de S equivalen a la matriz V de la SVD de Q.
+    S, D = diagRH(QtQ)
+    
+    # El vector que minimiza el error es el autovector asociado al menor autovalor.
+   
+    # Como diagRH los ordena de mayor a menor, extraemos la última columna.
+    m = S[:, -1]
+    
+    # Reorganizamos el vector de 12 elementos en la matriz de la cámara de 3x4.
+    M = m.reshape((3, 4))
+    
+    return M
+
+def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=False):
+    """Descompone la matriz de proyección M en los parámetros intrínsecos (K) y extrínsecos (R, t).
+
+    Parámetros:
+        M : numpy.ndarray de tamaño (3, 4)
+            Matriz de proyección de la cámara calculada previamente.
+        fuerza_k12_0 : bool, opcional
+            Si es True, impone que gamma (K12) sea igual a 0.
+        fuerza_au_av_iguales : bool, opcional
+            Si es True, impone que au sea igual a av.
+
+    Retorna:
+        R : numpy.ndarray de tamaño (3, 3)
+            Matriz ortogonal de rotación de la cámara.
+        t : numpy.ndarray de tamaño (3,)
+            Vector de traslación espacial.
+        K : numpy.ndarray de tamaño (3, 3)
+            Matriz de parámetros intrínsecos de la cámara (triangular superior).
+    """
+    # Verificamos que la matriz tenga exactamente 3 filas y 4 columnas
+    if np.shape(M) != (3, 4):
+        return None, None, None
+
+    # Extraemos los primeros tres elementos de cada fila (qi) y el último elemento (mi4)
+    q1 = M[0, :3]
+    q2 = M[1, :3]
+    q3 = M[2, :3]
+    
+    m14 = M[0, 3]
+    m24 = M[1, 3]
+    m34 = M[2, 3]
+
+    # Calculamos el factor de escala p
+    p = 1 / norma(q3, 2)
+
+    # Despejamos la tercera fila de la matriz de rotación y el tercer componente de t
+    r3 = p * q3
+    t3 = p * m34
+
+    # Calculamos v0 aprovechando la ortogonalidad con r3
+    v0 = p * producto_interno(q2, r3)
+    
+    # Aislamos la segunda fila de rotación, calculamos av y normalizamos
+    r2_sin_norma = (p * q2) - (v0 * r3)
+    av = norma(r2_sin_norma, 2)
+    r2 = r2_sin_norma / av
+    
+    # Despejamos el segundo componente de t
+    t2 = (p * m24 - v0 * t3) / av
+
+    # Calculamos u0 usando la ortogonalidad
+    u0 = p * producto_interno(q1, r3)            
+    
+    # Verificamos si tenemos que forzar gamma (K12) = 0
+    if fuerza_k12_0:
+        gamma = 0.0
+    else:
+        gamma = p * producto_interno(q1, r2)          
+    
+    # Aislamos la primera fila de rotación
+    r1_sin_normalizar = (p * q1) - (gamma * r2) - (u0 * r3)
+    
+    # Verificamos si tenemos que forzar au = av
+    if fuerza_au_av_iguales:
+        au = av
+    else:
+        au = norma(r1_sin_normalizar, 2)
+        
+    r1 = r1_sin_normalizar / au
+    
+    # Despejamos el primer componente de t
+    t1 = (p * m14 - gamma * t2 - u0 * t3) / au
+
+    # Armamos la matriz intrínseca K
+    K = np.array([
+        [au, gamma, u0],
+        [0.0, av, v0],
+        [0.0, 0.0, 1.0]
+    ])
+
+    # Armamos la matriz ortogonal de rotación R
+    R = np.array([r1, r2, r3])
+    
+    # Armamos el vector de traslación t
+    t = np.array([t1, t2, t3])
+
+    return R, t, K
+
 
 def norma(x: np.ndarray, p: int | str) -> float:
     """Recibe un vector x y un número p, admite p numérico o "inf".
@@ -164,6 +252,24 @@ def mult_mat(A, B):
                 AB[i, j] += A[i, k] * B[k, j]
 
     return AB
+
+def producto_interno(x, y):
+    """Calcula el producto interno entre dos vectores.
+
+    Parámetros:
+        x: primer vector.
+        y: segundo vector.
+    Retorna:
+        El producto interno de x e y, o None si sus dimensiones no coinciden.
+    """
+    if len(x) != len(y):
+        return None
+
+    producto = 0
+    for i in range(len(x)):
+        producto += x[i] * y[i]
+
+    return producto
 
 def calculaLU(A):
     """Calcula la factorización LU de una matriz cuadrada.
