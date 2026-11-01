@@ -717,3 +717,45 @@ def calcularMatrizK2D(A):
         return None
     K = inversa(L.T)
     return K / K[2, 2]
+
+
+def productoVectorial(a, b):
+    """Calcula el producto vectorial de dos vectores de tres componentes.
+
+    Parámetros:
+        a, b: vectores de tamaño (3,).
+    Retorna:
+        Vector de tamaño (3,) correspondiente a a x b.
+    """
+    return np.array([a[1] * b[2] - a[2] * b[1],
+                     a[2] * b[0] - a[0] * b[2],
+                     a[0] * b[1] - a[1] * b[0]])
+
+
+def obtenerPose2D(Hj, K):
+    """Recupera la pose del tablero a partir de su homografía.
+
+    Parámetros:
+        Hj: homografía de tamaño (3, 3), del plano del tablero a la imagen.
+        K: matriz intrínseca de tamaño (3, 3).
+    Retorna:
+        R de tamaño (3, 3) y t de tamaño (3,), con la convención
+        p_cámara=R p_tablero+t. Las unidades de t son las del tablero.
+        Se supone una vista no degenerada con el origen delante de la cámara.
+    """
+    # Deshacemos los parámetros intrínsecos para recuperar las columnas de pose.
+    columnas = mult_mat(inversa(K), Hj)
+    escala = 1 / norma(columnas[:, 0], 2)
+    if columnas[2, 2] < 0:
+        escala = -escala
+    r1 = escala * columnas[:, 0]
+    r2 = escala * columnas[:, 1]
+    t = escala * columnas[:, 2]
+
+    # Los datos reales no producen columnas perfectamente ortonormales.
+    r1 = r1 / norma(r1, 2)
+    r2 = r2 - producto_interno(r1, r2) * r1
+    r2 = r2 / norma(r2, 2)
+    r3 = productoVectorial(r1, r2)
+    R = np.array([r1, r2, r3]).T
+    return R, t
