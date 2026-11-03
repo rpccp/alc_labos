@@ -787,3 +787,45 @@ def calculoLambdaMu(I0, J0):
     res_mu = signo_b * np.sqrt((norma_C_cuadrado - a) / 2.0)
 
     return (res_lambda, res_mu), (-res_lambda, -res_mu)
+
+def calcularSalidaPOSIT(Is, Js, fx, m0, M0):
+    """Recupera la pose (i, j, k, Z0, R, t) correspondiente a una solución (Is, Js) de POS.
+
+    Parámetros:
+        Is, Js : vectores de tamaño (3,)
+            Solución completa I = I0 + lambda*n, J = J0 + mu*n del paso POS.
+        fx : float
+            Distancia focal en píxeles.
+        m0 : vector de tamaño (2,)
+            Imagen del punto de referencia M0, ya centrada respecto del centro
+            principal: (x0, y0) = (u0 - cu, v0 - cv).
+
+    Retorna:
+        i, j, k : vectores unitarios de tamaño (3,), ejes de la cámara en el sistema del objeto.
+        Z0 : float, profundidad del punto de referencia.
+        R : matriz de tamanño (3, 3), con filas i, j, k.
+        t : vector de tamaño (3,), t = (Z0/f) * (x0, y0, f).
+    """
+
+    norma_I = norma(Is, 2)
+    norma_J = norma(Js, 2)
+
+    # Recuperamos la profundidad del punto de referencia
+    Z0 = fx / norma_I
+
+    # Normalizamos I y J y calculamos el tercer eje
+    i = Is / norma_I
+    j = Js / norma_J
+    k = productoVectorial(i, j)
+
+    R = np.array([i, j, k])
+
+    # Ahora calculamos los puntos de referencia y el vector de traslacion
+    x0, y0 = m0[0], m0[1]
+
+    X0 = Z0 * x0/ fx
+    Y0 = Z0 * y0/ fx
+
+    t = np.array([X0, Y0, Z0])
+
+    return i, j, k, Z0, R, t
