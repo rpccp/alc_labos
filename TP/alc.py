@@ -253,6 +253,23 @@ def mult_mat(A, B):
 
     return AB
 
+def mult_mat_vector(A, x):
+    """Calcula el producto de una matriz por un vector.
+
+    Parámetros:
+        A: matriz de coeficientes.
+        x: vector de entrada.
+    Retorna:
+        El vector b tal que A x = b.
+    """
+    filas, columnas = A.shape
+    b = np.zeros(filas)
+    for i in range(filas):
+        for j in range(columnas):
+            b[i] += A[i, j] * x[j]
+
+    return b
+
 def producto_interno(x, y):
     """Calcula el producto interno entre dos vectores.
 
@@ -829,3 +846,48 @@ def calcularSalidaPOSIT(Is, Js, fx, m0, M0):
     t = np.array([X0, Y0, Z0])
 
     return i, j, k, Z0, R, t
+
+def evaluarPose(R, t, obj_vecs, img_vecs, K):
+    """Evalúa una pose reproyectando los puntos del objeto sobre la imagen.
+
+    Parámetros:
+        R : matriz (3, 3) de rotación (filas i, j, k).
+        t : vector (3,) de traslación, posición de M0 en coordenadas de cámara.
+        obj_vecs : arreglo (n, 3)
+            Puntos del objeto en el sistema del objeto, con M0 en el origen
+            (es decir, los vectores a_i = M0Mi).
+        img_vecs : arreglo (n, 2)
+            Posiciones (u, v) observadas en la imagen, en píxeles sin centrar.
+        K : matriz (3, 3) de parámetros intrínsecos.
+
+    Retorna:
+        cantidad_validas : int
+            Cantidad de puntos que quedan delante de la cámara (Z > 0).
+        rms : float
+            Raíz del error cuadrático medio (en píxeles) entre las proyecciones
+            y img_vecs, calculado solo sobre los puntos válidos.
+            Es infinito si ningún punto es válido.
+    """
+    cantidad_validas = 0
+    suma_errores = 0.0
+
+    for i in range(obj_vecs.shape[0]):
+        # Pasamos a coordenadas de la camara
+        vecs_camara = mult_mat_vector(R, obj_vecs) + t
+
+        # Salteamos los puntos que quedan detras de la camara
+        if vecs_camara[2] <= 0:
+            continue
+
+        proyeccion = mult_mat_vector(K, vecs_camara)
+        u = proyeccion[0] / proyeccion[2]
+        v = proyeccion[1] / proyeccion[2]
+
+        suma_errores += (u - img_vecs[i, 0]) ** 2 + (v - img_vecs[i, 1]) ** 2
+        cantidad_validas += 1
+
+    if cantidad_validas == 0:
+        return 0, float('inf')
+
+    rms = np.sqrt(suma_errores / cantidad_validas)
+    return cantidad_validas, rms
