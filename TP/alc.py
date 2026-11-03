@@ -759,3 +759,31 @@ def obtenerPose2D(Hj, K):
     r3 = productoVectorial(r1, r2)
     R = np.array([r1, r2, r3]).T
     return R, t
+
+def calculoLambdaMu(I0, J0):
+    """Calcula los escalares lambda y mu para el caso coplanar.
+
+    Parámetros:
+        I0: vector de tamaño (3,). Solución POS para I (A^+ * b_u)
+        J0: vector de tamaño (3,). Solución POS para J (A^+ * b_v)
+
+    Retorna:
+        Los dos pares de soluciones posibles (lambda1, mu1), (lambda2, mu2)
+    """
+
+    norma_I0 = norma(I0, 2)
+    norma_J0 = norma(J0, 2)
+    producto_I0_J0 = producto_interno(I0, J0)
+
+    # Calculo la parte real e imaginaria de C^2 y creo el vector
+    a = norma_J0 ** 2 - norma_I0 ** 2
+    b = -2 * producto_I0_J0
+    C_cuadrado = np.array([a, b])
+    norma_C_cuadrado = norma(C_cuadrado, 2)
+
+    # Calculo lamda y mu
+    res_lambda = np.sqrt((norma_C_cuadrado + a) / 2.0)
+    signo_b = 1 if b >= 0 else -1
+    res_mu = signo_b * np.sqrt((norma_C_cuadrado - a) / 2.0)
+
+    return (res_lambda, res_mu), (-res_lambda, -res_mu)
