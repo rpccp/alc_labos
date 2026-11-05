@@ -98,33 +98,45 @@ def obtenerQ3d(imgPts, objPts):
 
     return Q
 
-def resolverDLT3D(Q):
+def resolverDLT3D(Q, tol=1e-15, K=1000):
     """Resuelve el sistema Qm = 0 para encontrar la matriz de proyección M.
 
     Parámetros:
         Q : numpy.ndarray de tamaño (2*n, 12)
             Matriz de diseño del sistema obtenida a partir de las correspondencias 2D-3D.
+        tol : float
+            Tolerancia utilizada por diagRH.
+        K : int
+            Máximo de iteraciones del método de potencia en cada paso de diagRH.
 
     Retorna:
         M : numpy.ndarray de tamaño (3, 4)
             Matriz de proyección de la cámara calculada mediante cuadrados mínimos.
     """
-    Qt = traspuesta(Q)
-    QtQ = mult_mat(Qt, Q)
+    # Construimos la matriz simétrica (Q^T * Q).
+    Q = np.asarray(Q, dtype=float)
+    B = mult_mat(Q.T, Q)
     
-    # Calculamos autovectores (S) y autovalores (D) de QtQ.
-    # Las columnas de S equivalen a la matriz V de la SVD de Q.
-    S, D = diagRH(QtQ)
+    # Calculamos autovectores (S) y autovalores (D) de la matriz B.
+    S, D = diagRH(B, tol, K)
     
-    # El vector que minimiza el error es el autovector asociado al menor autovalor.
-   
-    # Como diagRH los ordena de mayor a menor, extraemos la última columna.
-    m = S[:, -1]
+    # Buscamos explícitamente el índice del menor autovalor en la diagonal.
+    indice_minimo = 0
+    for indice in range(1, D.shape[0]):
+        if D[indice, indice] < D[indice_minimo, indice_minimo]:
+            indice_minimo = indice
+            
+    # El vector que minimiza el error es la columna de S asociada al menor autovalor.
+    m = S[:, indice_minimo]
+    
+    # Forzamos que la norma sea exactamente 1 para cumplir la restricción del DLT.
+    m = m / norma(m, 2)
     
     # Reorganizamos el vector de 12 elementos en la matriz de la cámara de 3x4.
     M = m.reshape((3, 4))
     
     return M
+
 
 def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=False):
     """Descompone la matriz de proyección M en los parámetros intrínsecos (K) y extrínsecos (R, t).
@@ -146,7 +158,7 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
             Matriz de parámetros intrínsecos de la cámara (triangular superior).
     """
     # Verificamos que la matriz tenga exactamente 3 filas y 4 columnas
-    if np.shape(M) != (3, 4):
+    if M.shape != (3, 4):
         return None, None, None
 
     # Extraemos los primeros tres elementos de cada fila (qi) y el último elemento (mi4)
@@ -158,45 +170,60 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
     m24 = M[1, 3]
     m34 = M[2, 3]
 
-    # Calculamos el factor de escala p
-    p = 1 / norma(q3, 2)
+    # Calculamos el factor de escala p (inicialmente positivo)
+    p = 1.0 / norma(q3, 2)
 
-    # Despejamos la tercera fila de la matriz de rotación y el tercer componente de t
+    # Despejamos la tercera fila de la matriz de rotación
     r3 = p * q3
-    t3 = p * m34
 
     # Calculamos v0 aprovechando la ortogonalidad con r3
     v0 = p * producto_interno(q2, r3)
     
-    # Aislamos la segunda fila de rotación, calculamos av y normalizamos
+    # Aislamos la segunda fila de rotación, calculamos av real y normalizamos
     r2_sin_norma = (p * q2) - (v0 * r3)
     av = norma(r2_sin_norma, 2)
     r2 = r2_sin_norma / av
     
-    # Despejamos el segundo componente de t
+    # Calculamos u0 y gamma real usando la ortogonalidad
+    u0 = p * producto_interno(q1, r3)            
+    gamma_real = p * producto_interno(q1, r2)
+    
+    # Aislamos la primera fila de rotación restando sus proyecciones para garantizar ortogonalidad
+    r1_sin_normalizar = (p * q1) - (gamma_real * r2) - (u0 * r3)
+    au_real = norma(r1_sin_normalizar, 2)
+    r1 = r1_sin_normalizar / au_real
+    
+    # Armamos la matriz ortogonal de rotación R inicial
+    R = np.array([r1, r2, r3])
+
+    # Verificamos que R sea una rotación (det(R) = +1) y no una reflexión
+    det_R = (R[0, 0] * (R[1, 1] * R[2, 2] - R[1, 2] * R[2, 1])
+           - R[0, 1] * (R[1, 0] * R[2, 2] - R[1, 2] * R[2, 0])
+           + R[0, 2] * (R[1, 0] * R[2, 1] - R[1, 1] * R[2, 0]))
+
+    # Si es reflexión, invertimos el signo del factor de escala y de la matriz R
+    if det_R < 0:
+        p = -p
+        R = -R
+
+    # Despejamos el tercer y segundo componente de t usando el p definitivo
+    t3 = p * m34
     t2 = (p * m24 - v0 * t3) / av
 
-    # Calculamos u0 usando la ortogonalidad
-    u0 = p * producto_interno(q1, r3)            
-    
     # Verificamos si tenemos que forzar gamma (K12) = 0
     if fuerza_k12_0:
         gamma = 0.0
     else:
-        gamma = p * producto_interno(q1, r2)          
-    
-    # Aislamos la primera fila de rotación
-    r1_sin_normalizar = (p * q1) - (gamma * r2) - (u0 * r3)
-    
-    # Verificamos si tenemos que forzar au = av
+        gamma = gamma_real
+
+    # Verificamos si tenemos que forzar au = av (píxeles cuadrados)
     if fuerza_au_av_iguales:
-        au = av
+        au = 0.5 * (au_real + av)
+        av = au
     else:
-        au = norma(r1_sin_normalizar, 2)
-        
-    r1 = r1_sin_normalizar / au
-    
-    # Despejamos el primer componente de t
+        au = au_real
+
+    # Despejamos el primer componente de t usando los parámetros finales de K
     t1 = (p * m14 - gamma * t2 - u0 * t3) / au
 
     # Armamos la matriz intrínseca K
@@ -206,9 +233,6 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
         [0.0, 0.0, 1.0]
     ])
 
-    # Armamos la matriz ortogonal de rotación R
-    R = np.array([r1, r2, r3])
-    
     # Armamos el vector de traslación t
     t = np.array([t1, t2, t3])
 
