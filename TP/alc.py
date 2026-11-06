@@ -237,40 +237,43 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
     return R, t, K
 
 
-def norma(x: np.ndarray, p: int | str) -> float:
-    """Recibe un vector x y un número p, admite p numérico o "inf".
+def norma(x, p):
+    """Calcula la norma p de un vector.
 
-    Devuelve su norma p.
-
-    Reutilizada del módulo ALC."""
-    if p == 1:
-        return sum([abs(n) for n in x])
-
-    elif p == "inf":
-        max = 0
-        for n in x:
-            if abs(n) > max:
-                max = abs(n)
-        return max
-
-    suma = sum([n**p for n in x])
+    Parámetros:
+        x: vector al que se le calcula la norma.
+        p: orden de la norma, o 'inf' para la norma infinito.
+    Retorna:
+        El valor de la norma de x.
+    """
+    if p == 'inf':
+        maximo = 0
+        for valor in x.reshape(-1):
+            if abs(valor) > maximo:
+                maximo = abs(valor)
+        return maximo
+    suma = 0
+    for valor in x.reshape(-1):
+        suma += abs(valor) ** p
     return suma ** (1 / p)
 
 
 def mult_mat(A, B):
-    """Recibe A (m, n) y B (n, p).
+    """Calcula el producto matricial entre dos matrices.
 
-    Devuelve su producto (m, p).
+    Parámetros:
+        A: primera matriz del producto.
+        B: segunda matriz del producto.
+    Retorna:
+        La matriz resultante de multiplicar A por B.
+    """
+    filas_A, columnas_A = A.shape
+    _, columnas_B = B.shape
 
-    Reutilizada del módulo ALC."""
-    filasA = A.shape[0]
-    columnasB = B.shape[1]
-    columnasA = A.shape[1]
-    AB = np.zeros((filasA, columnasB))
-
-    for i in range(filasA):
-        for j in range(columnasB):
-            for k in range(columnasA):
+    AB = np.zeros((filas_A, columnas_B))
+    for i in range(filas_A):
+        for j in range(columnas_B):
+            for k in range(columnas_A):
                 AB[i, j] += A[i, k] * B[k, j]
 
     return AB
@@ -310,224 +313,245 @@ def producto_interno(x, y):
 
     return producto
 
+def copiar_matriz(A):
+    """Crea una copia independiente de una matriz o un vector.
+
+    Parámetros:
+        A: matriz bidimensional o vector.
+    Retorna:
+        Una copia de A.
+    """
+    if len(A.shape) == 1:
+        copia = np.zeros(A.shape[0])
+        for i in range(A.shape[0]):
+            copia[i] = A[i]
+        return copia
+
+    filas, columnas = A.shape
+    copia = np.zeros((filas, columnas))
+    for i in range(filas):
+        for j in range(columnas):
+            copia[i, j] = A[i, j]
+
+    return copia
+
+
 def calculaLU(A):
-    """Calcula la factorización LU de una matriz cuadrada.
+    """Calcula la factorización LU de una matriz sin pivoteo.
 
-    Parámetros
-    ----------
-    A : arreglo de tamaño (n, n)
-        Matriz cuadrada a factorizar.
-
-    Retorna
-    -------
-    matriz_L : numpy.ndarray de tamaño (n, n)
-        Matriz triangular inferior con unos en la diagonal principal.
-        Retorna None si la matriz no cumple los requisitos o hay ceros en la diagonal.
-    matriz_U : numpy.ndarray de tamaño (n, n)
-        Matriz triangular superior escalonada.
-        Retorna None si la matriz no cumple los requisitos o hay ceros en la diagonal.
-    cant_operaciones : int
-        Cantidad de operaciones elementales realizadas. Retorna 0 si el proceso falla.
+    Parámetros:
+        A: matriz cuadrada a factorizar.
+    Retorna:
+        Las matrices L y U y la cantidad de operaciones realizadas. Retorna
+        (None, None, 0) si A no es cuadrada o se necesita dividir por un pivote
+        nulo. No realiza intercambios de filas.
     """
     if A is None:
         return None, None, 0
 
-    # Intentamos convertir la entrada a un array de floats; si los tipos son incompatibles, abortamos
-    try:
-        matriz_U = np.array(A, dtype=float)
-    except:
+    n = A.shape[0]
+
+    if A.shape[1] != n:
         return None, None, 0
 
-    # Verificamos que la matriz sea estrictamente bidimensional y cuadrada
-    if matriz_U.ndim != 2 or matriz_U.shape[0] != matriz_U.shape[1]:
-        return None, None, 0
+    A_copia = copiar_matriz(A)
+    L = np.eye(n)
+    cant_op = 0
 
-    dimension = matriz_U.shape[0]
-    matriz_L = np.eye(dimension)
-    cant_operaciones = 0
+    for i in range(n - 1):
+        pivot = A_copia[i, i]
 
-    # Aplicamos eliminación gaussiana para construir L (multiplicadores) y escalonar U
-    for fila_pivote in range(dimension - 1):
-        pivote = matriz_U[fila_pivote][fila_pivote]
-
-        # Abortamos si encontramos un cero en la diagonal, ya que no implementamos pivoteo
-        if pivote == 0:
+        if pivot == 0:
             return None, None, 0
 
-        for fila_actual in range(fila_pivote + 1, dimension):
-            multiplicador = matriz_U[fila_actual][fila_pivote] / pivote
-            cant_operaciones += 1
+        for j in range(i + 1, n):
+            coef = A_copia[j, i] / pivot
+            cant_op += 1
 
-            matriz_L[fila_actual][fila_pivote] = multiplicador
-            matriz_U[fila_actual][fila_pivote] = 0
+            L[j, i] = coef
+            A_copia[j, i] = 0
 
-            matriz_U[fila_actual][fila_pivote + 1:] = matriz_U[fila_actual][fila_pivote + 1:] - multiplicador * matriz_U[fila_pivote][fila_pivote + 1:]
+            for k in range(i + 1, n):
+                A_copia[j, k] = A_copia[j, k] - coef * A_copia[i, k]
+                cant_op += 2
 
-            cant_operaciones += 2 * (dimension - fila_pivote - 1)
+    U = A_copia
+    return L, U, cant_op
 
-    return matriz_L, matriz_U, cant_operaciones
 
+def res_tri(L, b, inferior=True):
+    """Resuelve un sistema triangular mediante sustitución.
 
-def res_tri(A, b, inferior=True):
-    """Resuelve el sistema Ax = b cuando A es triangular inferior o superior.
-
-    Parámetros
-    ----------
-    A : arreglo de tamaño (n, n)
-        Matriz del sistema, debe ser triangular.
-    b : arreglo de tamaño (n,)
-        Vector de términos independientes.
-    inferior : bool, opcional
-        Indica si la matriz es triangular inferior (True) o superior (False).
-        Por defecto es True.
-
-    Retorna
-    -------
-    vector_solucion : numpy.ndarray de tamaño (n,)
-        Vector con la solución del sistema. Retorna None si las dimensiones
-        no son compatibles o si la matriz es singular.
+    Parámetros:
+        L: matriz triangular.
+        b: vector del lado derecho, compatible con L.
+        inferior: indica si L es triangular inferior. Si no, se considera
+            triangular superior.
+    Retorna:
+        El vector x que resuelve Lx = b, o None si la diagonal contiene
+        un elemento nulo.
     """
-    # Intentamos convertir las entradas a arrays numéricos; abortamos si los tipos son incompatibles
-    try:
-        matriz_T = np.array(A, dtype=float)
-        vector_b = np.array(b, dtype=float)
-    except:
-        return None
-
-    # Verificamos que la matriz sea bidimensional y estrictamente cuadrada
-    if matriz_T.ndim != 2 or matriz_T.shape[0] != matriz_T.shape[1]:
-        return None
-
-    # Verificamos que el término independiente sea un vector unidimensional
-    if vector_b.ndim != 1:
-        return None
-
-    dimension = matriz_T.shape[0]
-
-    # Chequeamos la compatibilidad de dimensiones entre la matriz y el vector
-    if vector_b.shape[0] != dimension:
-        return None
-
-    vector_solucion = np.zeros(dimension)
+    n = L.shape[0]
+    X = np.zeros(len(b))
 
     if inferior:
-        # Resolvemos por sustitución hacia adelante (forward substitution)
-        for fila in range(dimension):
-            # Si encontramos un cero en la diagonal, la matriz es singular (no tiene solución única)
-            if matriz_T[fila][fila] == 0:
+        for i in range(n):
+            if L[i, i] == 0:
                 return None
+            X[i] = b[i]
+            for j in range(i):
+                X[i] -= L[i, j] * X[j]
+            X[i] /= L[i, i]
+        return X
 
-            suma_parcial = 0.0
-            for columna in range(fila):
-                suma_parcial += matriz_T[fila][columna] * vector_solucion[columna]
+    for i in range(n - 1, -1, -1):
+        if L[i, i] == 0:
+            return None
+        X[i] = b[i]
+        for j in range(i + 1, n):
+            X[i] -= L[i, j] * X[j]
+        X[i] /= L[i, i]
 
-            vector_solucion[fila] = (vector_b[fila] - suma_parcial) / matriz_T[fila][fila]
-    else:
-        # Resolvemos por sustitución hacia atrás (backward substitution)
-        for fila in range(dimension - 1, -1, -1):
-            # Si encontramos un cero en la diagonal, la matriz es singular (no tiene solución única)
-            if matriz_T[fila][fila] == 0:
-                return None
-
-            suma_parcial = 0.0
-            for columna in range(fila + 1, dimension):
-                suma_parcial += matriz_T[fila][columna] * vector_solucion[columna]
-
-            vector_solucion[fila] = (vector_b[fila] - suma_parcial) / matriz_T[fila][fila]
-
-    return vector_solucion
+    return X
 
 
 def inversa(A):
-    """Calcula la inversa de A mediante su factorización LU.
+    """Calcula la inversa de una matriz mediante su factorización LU.
 
-    Parámetros
-    ----------
-    A : arreglo de tamaño (n, n)
-        Matriz cuadrada a invertir.
-
-    Retorna
-    -------
-    matriz_inversa : numpy.ndarray de tamaño (n, n)
-        Matriz inversa calculada resolviendo sistemas triangulares.
-        Retorna None si la factorización falla o la matriz es singular.
+    Parámetros:
+        A: matriz cuadrada a invertir.
+    Retorna:
+        La matriz inversa de A, o None si A no se puede invertir.
     """
-    # Obtenemos la descomposición LU de la matriz original
-    resultado_lu = calculaLU(A)
-    matriz_L, matriz_U, _ = resultado_lu
+    L, U, _ = calculaLU(A)
 
-    # Verificamos que la matriz haya podido factorizarse correctamente
-    if matriz_L is None or matriz_U is None:
+    if L is None or U is None:
         return None
 
-    dimension = matriz_U.shape[0]
-    matriz_inversa = np.zeros((dimension, dimension))
+    n = U.shape[0]
+    A_inversa = np.zeros((n, n))
 
-    # Construimos la inversa resolviendo el sistema para cada columna de la matriz identidad
-    for columna in range(dimension):
-        # Generamos el vector de la base canónica (e_j) correspondiente a la columna actual
-        vector_canonico = np.zeros(dimension)
-        vector_canonico[columna] = 1.0
+    for j in range(n):
+        e_j = np.zeros(n)
+        e_j[j] = 1.0
 
-        # Resolvemos el sistema triangular inferior L * y = e_j
-        vector_y = res_tri(matriz_L, vector_canonico)
-        if vector_y is None:
+        y = res_tri(L, e_j)
+        if y is None:
             return None
 
-        # Resolvemos el sistema triangular superior U * x = y
-        columna_inversa = res_tri(matriz_U, vector_y, inferior=False)
-        if columna_inversa is None:
+        x = res_tri(U, y, inferior=False)
+        if x is None:
             return None
 
-        # Acoplamos el vector resultante como columna en la matriz inversa final
-        matriz_inversa[:, columna] = columna_inversa
+        A_inversa[:, j] = x
 
-    return matriz_inversa
+    return A_inversa
 
 
-def metpot2k(A, tol = 1e-15, K = 1000):
-    """Recibe A simétrica, tolerancia tol y máximo K de iteraciones.
+def metpot2k(A, tol=1e-15, K=1000):
+    """Aplica dos pasos de potencia por iteración, hasta tol o K iteraciones.
 
-    Devuelve un autovector dominante, su autovalor y las iteraciones usadas.
+    Parámetros:
+        A: matriz real cuadrada.
+        tol: tolerancia sobre |v_nuevo.T v_anterior - 1|.
+        K: máximo de iteraciones dobles.
+    Retorna:
+        Vector unitario v de forma (n,), cociente de Rayleigh lambda y número
+        de iteraciones. Si Av=0 devuelve v y lambda=0 sin dividir por cero.
+    """
+    A = np.array(A, dtype=float)
+    v = np.random.rand(A.shape[0], 1)
+    v = v / norma(v, 2)
+    iteraciones = 0
 
-    Reutilizada del módulo ALC."""
+    for paso in range(int(K)):
+        # Primer paso: una imagen nula identifica un autovector de autovalor cero.
+        Av = mult_mat(A, v)
+        norma_Av = norma(Av, 2)
+        if norma_Av == 0:
+            return v[:, 0], 0.0, iteraciones
+        intermedio = Av / norma_Av
 
-    def f(A, v):
-        res = mult_mat(A, v)
-        return res / norma(res, 2)
+        # Segundo paso: también se contempla A^2 v=0 con Av distinto de cero.
+        siguiente = mult_mat(A, intermedio)
+        norma_siguiente = norma(siguiente, 2)
+        if norma_siguiente == 0:
+            return intermedio[:, 0], 0.0, paso + 1
+        siguiente = siguiente / norma_siguiente
+        error = abs(producto_interno(siguiente[:, 0], v[:, 0]) - 1)
+        v = siguiente
+        iteraciones = paso + 1
+        if error <= tol:
+            break
 
+    Av = mult_mat(A, v)
+    autovalor = producto_interno(v[:, 0], Av[:, 0])
+    norma_Av = norma(Av, 2)
+    residuo = norma(Av - autovalor * v, 2)
+    # A^2 puede estabilizar una mezcla de autovectores de +lambda y -lambda.
+    # Solo si se estabilizó la dirección pero no satisface Av=lambda*v,
+    # proyectamos esa mezcla sobre uno de los dos autoespacios.
+    if iteraciones and error <= tol and norma_Av > 0:
+        if residuo > 10 * tol ** 0.5 * norma_Av:
+            candidato = v + Av / norma_Av
+            norma_candidato = norma(candidato, 2)
+            if norma_candidato > 0:
+                v = candidato / norma_candidato
+                Av = mult_mat(A, v)
+                autovalor = producto_interno(v[:, 0], Av[:, 0])
+    return v[:, 0], autovalor, iteraciones
+
+
+def esSimetrica(A, tol=0):
+    """Indica si A es simétrica.
+
+    Parámetros:
+        A: matriz cuadrada representada como un array bidimensional.
+        tol: tolerancia absoluta para comparar entradas simétricas.
+            Por defecto es cero, para comparar exactamente.
+    Retorna:
+        True si A coincide con su traspuesta dentro de tol; False en caso contrario.
+    """
+    filas, columnas = A.shape
+    if filas != columnas:
+        return False
+
+    for i in range(filas):
+        for j in range(columnas):
+            if i != j:
+                if abs(A[i, j] - A[j, i]) > tol:
+                    return False
+
+    return True
+
+
+def diagRH(A, tol=1e-15, K=1000):
+    """Diagonaliza A simétrica mediante potencia y reflexiones de Householder.
+
+    Parámetros:
+        A: matriz real cuadrada y simétrica.
+        tol: tolerancia de potencia y comprobación numérica de simetría.
+        K: máximo de iteraciones dobles de potencia por autovector.
+    Retorna:
+        S y D, con A aproximadamente S D S.T; None si A no es simétrica.
+    """
+    A = np.array(A, dtype=float)
+    if A.ndim != 2 or A.shape[0] != A.shape[1]:
+        return None
     n = len(A)
-
-    v = np.random.rand(n, 1)
-    v_moño = f(A, f(A, v))
-
-    e = mult_mat(v_moño.T, v)
-
-    k = 0
-    while (np.abs(e - 1) > tol) and (k < K):
-        v = v_moño
-        v_moño = f(A, f(A, v))
-        e = mult_mat(v_moño.T, v)
-        k += 1
-
-    autovalor = mult_mat(v_moño.T, mult_mat(A, v_moño))
-
-    return (v_moño, autovalor[0][0], k)
-
-
-def diagRH(A, tol = 1e-15, K = 1000):
-    """Recibe A simétrica, tolerancia tol y máximo K de iteraciones.
-
-    Devuelve S y D tales que A es aproximadamente S D S.T: las columnas
-    de S son autovectores y la diagonal de D contiene sus autovalores.
-
-    Reutilizada del módulo ALC."""
-
-    n = len(A)
-    if n == 1:
-        return np.eye(1), A
+    if n <= 1:
+        return np.eye(n), np.array(A)
+    escala = norma(A, 'inf')
+    if not esSimetrica(A, tol * max(1.0, escala)):
+        return None
+    if escala == 0:
+        return np.eye(n), np.zeros((n, n))
 
     v_1, lambda_1, _ = metpot2k(A, tol, K)
+    v_1 = v_1.reshape((n, 1))
+    # El signo del autovector es libre; esta elección evita e1-v casi nulo.
+    if v_1[0, 0] > 0:
+        v_1 = -v_1
 
     I = np.eye(n, n)
     e_1 = I[:, [0]]
@@ -541,6 +565,8 @@ def diagRH(A, tol = 1e-15, K = 1000):
         H_v_1 = I
 
     B = mult_mat(H_v_1, mult_mat(A, H_v_1.T))
+    # Recuperamos la simetría que puede perderse por redondeo en los productos.
+    B = (B + B.T) / 2
     A_moño = B[1:, 1:]
 
     S_moño, D_moño = diagRH(A_moño, tol, K)
@@ -553,7 +579,7 @@ def diagRH(A, tol = 1e-15, K = 1000):
     S[1:, 1:] = S_moño
     S = mult_mat(H_v_1, S)
 
-    return (S, D)
+    return S, D
 
 
 def resolverDLT2D(Q, tol=1e-15, K=1000):
@@ -696,32 +722,85 @@ def armarA(Hlst):
     return A
 
 
-def calculaCholesky(A, atol=1e-15):
-    """Calcula la factorización de Cholesky sin modificar A.
+def calculaLDV(A):
+    """Calcula la factorización A = L D V a partir de la factorización LU.
 
     Parámetros:
-        A: matriz simétrica de tamaño (n, n).
-        atol: tolerancia para considerar positivo cada pivote.
+        A: matriz cuadrada a factorizar.
     Retorna:
-        L triangular inferior tal que A=L L.T, o None si un pivote es
-        menor o igual a atol.
+        Las matrices L, D y V, o None si no se puede calcular la factorización.
     """
+    L, U, _ = calculaLU(A)
+
+    if L is None or U is None:
+        return None
+
+    L2, D, _ = calculaLU(U.T)
+    if L2 is None or D is None:
+        return None
+
+    return L, D, L2.T
+
+
+def esSDP(A, atol=1e-8):
+    """Determina si una matriz es simétrica definida positiva.
+
+    Parámetros:
+        A: matriz cuadrada.
+        atol: tolerancia máxima para considerar simétricas dos entradas.
+    Retorna:
+        True si A es simétrica dentro de la tolerancia y definida positiva.
+        False en caso contrario.
+    """
+    if A is None or atol < 0 or len(A.shape) != 2:
+        return False
+
     n = A.shape[0]
-    L = np.zeros((n, n))
-    # Cada entrada usa solo columnas anteriores de L ya calculadas.
+    if A.shape[1] != n:
+        return False
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if abs(A[i, j] - A[j, i]) > atol:
+                return False
+
+    resultado_ldv = calculaLDV(A)
+    if resultado_ldv is None:
+        return False
+    _, D, _ = resultado_ldv
+
+    for i in range(n):
+        if D[i, i] <= atol:
+            return False
+
+    return True
+
+
+def calculaCholesky(A, atol=1e-10):
+    """Calcula una factorización de Cholesky de una matriz SDP.
+
+    Parámetros:
+        A: matriz simétrica definida positiva.
+        atol: tolerancia usada para verificar simetría y positividad.
+    Retorna:
+        La matriz triangular inferior R tal que A = R R.T, o None si A no es
+        simétrica definida positiva.
+    """
+    if not esSDP(A, atol):
+        return None
+
+    resultado_ldv = calculaLDV(A)
+    if resultado_ldv is None:
+        return None
+    L, D, _ = resultado_ldv
+
+    n = L.shape[0]
+    R = np.zeros((n, n))
     for i in range(n):
         for j in range(i + 1):
-            suma = 0.0
-            for k in range(j):
-                suma += L[i, k] * L[j, k]
-            if i == j:
-                pivote = A[i, i] - suma
-                if pivote <= atol:
-                    return None
-                L[i, j] = pivote ** 0.5
-            else:
-                L[i, j] = (A[i, j] - suma) / L[j, j]
-    return L
+            R[i, j] = L[i, j] * D[j, j] ** 0.5
+
+    return R
 
 
 def calcularMatrizK2D(A):
@@ -749,9 +828,9 @@ def calcularMatrizK2D(A):
                   [b[3], b[4], b[5]]])
 
     # Solo uno de los signos puede dar una matriz definida positiva.
-    L = calculaCholesky(B)
+    L = calculaCholesky(B, atol=1e-15)
     if L is None:
-        L = calculaCholesky(-B)
+        L = calculaCholesky(-B, atol=1e-15)
     if L is None:
         return None
     K = inversa(L.T)
