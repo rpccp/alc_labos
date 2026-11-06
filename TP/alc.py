@@ -206,10 +206,6 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
         p = -p
         R = -R
 
-    # Despejamos el tercer y segundo componente de t usando el p definitivo
-    t3 = p * m34
-    t2 = (p * m24 - v0 * t3) / av
-
     # Verificamos si tenemos que forzar gamma (K12) = 0
     if fuerza_k12_0:
         gamma = 0.0
@@ -223,7 +219,9 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
     else:
         au = au_real
 
-    # Despejamos el primer componente de t usando los parámetros finales de K
+    # Despejamos t de abajo hacia arriba usando el p y los parámetros finales de K
+    t3 = p * m34
+    t2 = (p * m24 - v0 * t3) / av
     t1 = (p * m14 - gamma * t2 - u0 * t3) / au
 
     # Armamos la matriz intrínseca K
