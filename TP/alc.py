@@ -838,13 +838,18 @@ def calcularSalidaPOSIT(Is, Js, fx, m0, M0):
         fx : float
             Distancia focal en píxeles.
         m0 : vector de tamaño (2,)
-            Imagen del punto de referencia M0, ya centrada respecto del centro
-            principal: (x0, y0) = (u0 - cu, v0 - cv).
+            Imagen del punto de referencia M0, centrada y expresada en un
+            modelo con focal fx en ambos ejes. aplicarPOSIT transforma antes
+            los píxeles con K inversa si las focales son distintas.
+        M0 : vector de tamaño (3,)
+            Punto de referencia del objeto. La pose que devuelve esta función
+            usa vectores relativos a M0: t es su posición en la cámara.
+            El cambio al origen original se realiza en aplicarPOSIT.
 
     Retorna:
         i, j, k : vectores unitarios de tamaño (3,), ejes de la cámara en el sistema del objeto.
         Z0 : float, profundidad del punto de referencia.
-        R : matriz de tamanño (3, 3), con filas i, j, k.
+        R : matriz de tamaño (3, 3), con filas i, j, k.
         t : vector de tamaño (3,), t = (Z0/f) * (x0, y0, f).
     """
 
@@ -915,3 +920,103 @@ def evaluarPose(R, t, obj_vecs, img_vecs, K):
 
     rms = np.sqrt(suma_errores / cantidad_validas)
     return cantidad_validas, rms
+
+
+def aplicarPOSIT(obj_vecs, img_vecs, K, MaxIt, atol):
+    """Estima la pose de puntos coplanares mediante la iteración POSIT.
+
+    Parámetros:
+        obj_vecs: arreglo (n, 3) con los puntos coplanares del objeto, en una
+            misma unidad y en correspondencia con las filas de img_vecs.
+            El primer punto se usa como referencia M0.
+        img_vecs: arreglo (n, 2) con sus píxeles observados, sin centrar.
+        K: matriz intrínseca (3, 3), con K[2,2]=1 y focales positivas.
+        MaxIt: máximo de pasos POS; debe ser un entero positivo.
+        atol: reducción mínima del RMS, en píxeles, para seguir iterando.
+    Retorna:
+        R (3, 3) y t (3,) de la mejor pose visitada, con la convención
+        p_cámara=R p_objeto+t. t tiene las unidades de obj_vecs.
+        Lanza ValueError si no aparece una pose con todos los puntos delante
+        de la cámara. Se requieren puntos coplanares no colineales.
+    """
+    puntos = np.asarray(obj_vecs, dtype=float)
+    pixeles = np.asarray(img_vecs, dtype=float)
+    if MaxIt < 1:
+        raise ValueError('MaxIt debe ser positivo.')
+
+    # Expresamos el objeto respecto del primer punto: A tiene rango dos.
+    M0 = puntos[0]
+    A = puntos - M0
+    cantidad = A.shape[0]
+
+    # Llevamos los píxeles a una cámara virtual de focal f en ambos ejes.
+    # Así se contemplan las dos focales y el sesgo de la K recibida.
+    f = K[0, 0]
+    K_inversa = inversa(K)
+    centrados = np.zeros((cantidad, 2))
+    for indice in range(cantidad):
+        u, v = pixeles[indice]
+        rayo = mult_mat_vector(K_inversa, np.array([u, v, 1.0]))
+        centrados[indice] = f * rayo[:2] / rayo[2]
+    m0 = centrados[0]
+
+    # Dos vectores independientes del plano determinan su normal unitaria.
+    # Elegimos el par con mayor producto vectorial para evitar pares casi paralelos.
+    mayor_norma = 0.0
+    for fila in range(cantidad):
+        for otra in range(fila):
+            candidata = productoVectorial(A[fila], A[otra])
+            longitud = norma(candidata, 2)
+            if longitud > mayor_norma:
+                mayor_norma = longitud
+                normal = candidata / longitud
+    if mayor_norma == 0:
+        raise ValueError('Los puntos del objeto no deben ser colineales.')
+
+    # Para rango dos, A^+=(A.T A+n n.T)^-1 A.T. El término n n.T
+    # solo hace invertible la dirección normal, en la que A.T b vale cero;
+    # por eso conserva la solución de mínimos cuadrados de norma mínima.
+    columna_normal = normal.reshape((3, 1))
+    matriz = mult_mat(A.T, A) + mult_mat(columna_normal, columna_normal.T)
+    pseudoinversa = mult_mat(inversa(matriz), A.T)
+
+    # La aproximación ortográfica inicial supone iguales profundidades.
+    epsilon = np.zeros(cantidad)
+    error_anterior = None
+    mejor_error = float('inf')
+    mejor_R, mejor_t = None, None
+    for iteracion in range(MaxIt):
+        b_u = centrados[:, 0] * (1 + epsilon) - m0[0]
+        b_v = centrados[:, 1] * (1 + epsilon) - m0[1]
+        I0 = mult_mat_vector(pseudoinversa, b_u)
+        J0 = mult_mat_vector(pseudoinversa, b_v)
+
+        # Examinamos ambas soluciones coplanares y rechazamos cualquiera
+        # que deje al menos un punto detrás de la cámara o con Z=0.
+        error_actual = float('inf')
+        pose_actual = None
+        for lam, mu in calculoLambdaMu(I0, J0):
+            Is = I0 + lam * normal
+            Js = J0 + mu * normal
+            i, j, k, Z0, R, t_referencia = calcularSalidaPOSIT(Is, Js, f, m0, M0)
+            validas, error = evaluarPose(R, t_referencia, A, pixeles, K)
+            if validas == cantidad and error < error_actual:
+                error_actual = error
+                pose_actual = (k, Z0, R, t_referencia)
+        if pose_actual is None:
+            raise ValueError('Ninguna solución POSIT deja todos los puntos delante de la cámara.')
+
+        k, Z0, R, t_referencia = pose_actual
+        if error_actual < mejor_error:
+            mejor_error = error_actual
+            mejor_R = R
+            # Volvemos al origen original del objeto, si M0 no era cero.
+            mejor_t = t_referencia - mult_mat_vector(R, M0)
+
+        # Si el RMS no mejora en al menos atol, conservamos la mejor pose.
+        if error_anterior is not None and error_anterior - error_actual < atol:
+            break
+        error_anterior = error_actual
+        epsilon = mult_mat_vector(A, k) / Z0
+
+    return mejor_R, mejor_t
