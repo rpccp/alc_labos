@@ -277,6 +277,23 @@ def mult_mat(A, B):
 
     return AB
 
+def mult_mat_vector(A, x):
+    """Calcula el producto de una matriz por un vector.
+
+    Parámetros:
+        A: matriz de coeficientes.
+        x: vector de entrada.
+    Retorna:
+        El vector b tal que A x = b.
+    """
+    filas, columnas = A.shape
+    b = np.zeros(filas)
+    for i in range(filas):
+        for j in range(columnas):
+            b[i] += A[i, j] * x[j]
+
+    return b
+
 def producto_interno(x, y):
     """Calcula el producto interno entre dos vectores.
 
@@ -783,3 +800,118 @@ def obtenerPose2D(Hj, K):
     r3 = productoVectorial(r1, r2)
     R = np.array([r1, r2, r3]).T
     return R, t
+
+def calculoLambdaMu(I0, J0):
+    """Calcula los escalares lambda y mu para el caso coplanar.
+
+    Parámetros:
+        I0: vector de tamaño (3,). Solución POS para I (A^+ * b_u)
+        J0: vector de tamaño (3,). Solución POS para J (A^+ * b_v)
+
+    Retorna:
+        Los dos pares de soluciones posibles (lambda1, mu1), (lambda2, mu2)
+    """
+
+    norma_I0 = norma(I0, 2)
+    norma_J0 = norma(J0, 2)
+    producto_I0_J0 = producto_interno(I0, J0)
+
+    # Calculo la parte real e imaginaria de C^2 y creo el vector
+    a = norma_J0 ** 2 - norma_I0 ** 2
+    b = -2 * producto_I0_J0
+    C_cuadrado = np.array([a, b])
+    norma_C_cuadrado = norma(C_cuadrado, 2)
+
+    # Calculo lamda y mu
+    res_lambda = np.sqrt((norma_C_cuadrado + a) / 2.0)
+    signo_b = 1 if b >= 0 else -1
+    res_mu = signo_b * np.sqrt((norma_C_cuadrado - a) / 2.0)
+
+    return (res_lambda, res_mu), (-res_lambda, -res_mu)
+
+def calcularSalidaPOSIT(Is, Js, fx, m0, M0):
+    """Recupera la pose (i, j, k, Z0, R, t) correspondiente a una solución (Is, Js) de POS.
+
+    Parámetros:
+        Is, Js : vectores de tamaño (3,)
+            Solución completa I = I0 + lambda*n, J = J0 + mu*n del paso POS.
+        fx : float
+            Distancia focal en píxeles.
+        m0 : vector de tamaño (2,)
+            Imagen del punto de referencia M0, ya centrada respecto del centro
+            principal: (x0, y0) = (u0 - cu, v0 - cv).
+
+    Retorna:
+        i, j, k : vectores unitarios de tamaño (3,), ejes de la cámara en el sistema del objeto.
+        Z0 : float, profundidad del punto de referencia.
+        R : matriz de tamanño (3, 3), con filas i, j, k.
+        t : vector de tamaño (3,), t = (Z0/f) * (x0, y0, f).
+    """
+
+    norma_I = norma(Is, 2)
+    norma_J = norma(Js, 2)
+
+    # Recuperamos la profundidad del punto de referencia
+    Z0 = fx / norma_I
+
+    # Normalizamos I y J y calculamos el tercer eje
+    i = Is / norma_I
+    j = Js / norma_J
+    k = productoVectorial(i, j)
+
+    R = np.array([i, j, k])
+
+    # Ahora calculamos los puntos de referencia y el vector de traslacion
+    x0, y0 = m0[0], m0[1]
+
+    X0 = Z0 * x0/ fx
+    Y0 = Z0 * y0/ fx
+
+    t = np.array([X0, Y0, Z0])
+
+    return i, j, k, Z0, R, t
+
+def evaluarPose(R, t, obj_vecs, img_vecs, K):
+    """Evalúa una pose reproyectando los puntos del objeto sobre la imagen.
+
+    Parámetros:
+        R : matriz (3, 3) de rotación (filas i, j, k).
+        t : vector (3,) de traslación, posición de M0 en coordenadas de cámara.
+        obj_vecs : arreglo (n, 3)
+            Puntos del objeto en el sistema del objeto, con M0 en el origen
+            (es decir, los vectores a_i = M0Mi).
+        img_vecs : arreglo (n, 2)
+            Posiciones (u, v) observadas en la imagen, en píxeles sin centrar.
+        K : matriz (3, 3) de parámetros intrínsecos.
+
+    Retorna:
+        cantidad_validas : int
+            Cantidad de puntos que quedan delante de la cámara (Z > 0).
+        rms : float
+            Raíz del error cuadrático medio (en píxeles) entre las proyecciones
+            y img_vecs, calculado solo sobre los puntos válidos.
+            Es infinito si ningún punto es válido.
+    """
+    cantidad_validas = 0
+    suma_errores = 0.0
+
+    for i in range(obj_vecs.shape[0]):
+        # Pasamos a coordenadas de la camara
+        vecs_camara = mult_mat_vector(R, obj_vecs[i]) + t
+
+        # Salteamos los puntos que quedan detras de la camara
+        if vecs_camara[2] <= 0:
+            continue
+
+        proyeccion = mult_mat_vector(K, vecs_camara)
+        u = proyeccion[0] / proyeccion[2]
+        v = proyeccion[1] / proyeccion[2]
+
+        suma_errores += (u - img_vecs[i, 0]) ** 2 + (v - img_vecs[i, 1]) ** 2
+        cantidad_validas += 1
+
+    if cantidad_validas == 0:
+        return 0, float('inf')
+
+    rms = np.sqrt(suma_errores / cantidad_validas)
+    return cantidad_validas, rms
