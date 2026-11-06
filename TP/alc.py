@@ -873,7 +873,7 @@ def evaluarPose(R, t, obj_vecs, img_vecs, K):
 
     for i in range(obj_vecs.shape[0]):
         # Pasamos a coordenadas de la camara
-        vecs_camara = mult_mat_vector(R, obj_vecs) + t
+        vecs_camara = mult_mat_vector(R, obj_vecs[i]) + t
 
         # Salteamos los puntos que quedan detras de la camara
         if vecs_camara[2] <= 0:
