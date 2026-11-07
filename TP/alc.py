@@ -34,10 +34,33 @@ def svd_reducida(A, k="max", tol=1e-15):
     m, n = np.shape(A)
 
     if m < n:
-        U, Sigma2 = diagRH(mult_mat(A, A.T), tol)
+        G = mult_mat(A, A.T)
+    else:
+        G = mult_mat(A.T, A)
+
+    # Restamos un múltiplo de la identidad para separar mejor los autovalores
+    # en términos relativos, sin cambiar los autovectores. Elegimos una cota
+    # inferior de los autovalores para que la matriz siga siendo semidefinida positiva.
+    desplazamiento = G[0, 0]
+    for i in range(G.shape[0]):
+        cota = G[i, i]
+        for j in range(G.shape[1]):
+            if i != j:
+                cota -= abs(G[i, j])
+        desplazamiento = min(desplazamiento, cota)
+
+    for i in range(G.shape[0]):
+        G[i, i] -= desplazamiento
+    vectores, Sigma2 = diagRH(G, tol)
+    # Recuperamos los autovalores de la matriz original.
+    for i in range(Sigma2.shape[0]):
+        Sigma2[i, i] += desplazamiento
+
+    if m < n:
+        U = vectores
         V = mult_mat(U.T, A).T
     else:
-        V, Sigma2 = diagRH(mult_mat(A.T, A), tol)
+        V = vectores
         U = mult_mat(A, V)
 
     Sigma = []
@@ -269,7 +292,7 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
     t1 = (p * m14 - gamma * t2 - u0 * t3) / au
     t = np.array([t1, t2, t3])
 
-   # Si se modificó K, recalculamos R proyectando C = p * K^(-1) * A mediante SVD
+    # Si se modificó K, recalculamos R proyectando C = p * K^(-1) * A mediante SVD
     if fuerza_k12_0 or fuerza_au_av_iguales:
         A_escalada = p * M[:, :3]
         C = mult_mat(inversa(K), A_escalada)
