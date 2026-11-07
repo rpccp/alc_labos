@@ -23,6 +23,47 @@ def traspuesta(A):
 
     return np.array(At)
 
+def svd_reducida(A, k="max", tol=1e-15):
+    """
+    A la matriz de interes (de m x n)
+    k el numero de valores singulares (y vectores) a retener.
+    tol la tolerancia para considerar un valor singular igual a cero
+    Retorna hatU (matriz de m x k), hatSig (vector de k valores singulares) y hatV (matriz de n x k)
+    """
+
+    m, n = np.shape(A)
+
+    if m < n:
+        U, Sigma2 = diagRH(mult_mat(A, A.T), tol)
+        V = mult_mat(U.T, A).T
+    else:
+        V, Sigma2 = diagRH(mult_mat(A.T, A), tol)
+        U = mult_mat(A, V)
+
+    Sigma = []
+    for i in range(min(n, m)):
+        if abs(Sigma2[i, i]) > tol:
+            Sigma.append(Sigma2[i, i] ** 0.5)
+
+    r = len(Sigma)
+
+    if isinstance(k, int):
+        r = min(r, k)
+        Sigma = Sigma[:r]
+
+    U = U[:, :r]
+    V = V[:, :r]
+
+    if m < n:
+        for j in range(r):
+            V[:, j] /= norma(V[:, j], 2)
+    else:
+        for j in range(r):
+            U[:, j] /= norma(U[:, j], 2)
+
+    return U, Sigma, V
+
+
 def obtenerQ2d(imgPts, objPts):
     """Construye la matriz Q del DLT coplanar (ecuación 11 del enunciado).
 
@@ -165,7 +206,7 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
     q1 = M[0, :3]
     q2 = M[1, :3]
     q3 = M[2, :3]
-    
+
     m14 = M[0, 3]
     m24 = M[1, 3]
     m34 = M[2, 3]
@@ -178,25 +219,25 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
 
     # Calculamos v0 aprovechando la ortogonalidad con r3
     v0 = p * producto_interno(q2, r3)
-    
-    # Aislamos la segunda fila de rotación, calculamos av real y normalizamos
+
+    # Aislamos la segunda fila de rotación, calculamos av y normalizamos
     r2_sin_norma = (p * q2) - (v0 * r3)
     av = norma(r2_sin_norma, 2)
     r2 = r2_sin_norma / av
-    
-    # Calculamos u0 y gamma real usando la ortogonalidad
-    u0 = p * producto_interno(q1, r3)            
-    gamma_real = p * producto_interno(q1, r2)
-    
-    # Aislamos la primera fila de rotación restando sus proyecciones para garantizar ortogonalidad
-    r1_sin_normalizar = (p * q1) - (gamma_real * r2) - (u0 * r3)
-    au_real = norma(r1_sin_normalizar, 2)
-    r1 = r1_sin_normalizar / au_real
-    
-    # Armamos la matriz ortogonal de rotación R inicial
+
+    # Calculamos u0 y el sesgo (gamma) usando la ortogonalidad
+    u0 = p * producto_interno(q1, r3)
+    gamma = p * producto_interno(q1, r2)
+
+    # Aislamos la primera fila de rotación, calculamos au y normalizamos
+    r1_sin_normalizar = (p * q1) - (gamma * r2) - (u0 * r3)
+    au = norma(r1_sin_normalizar, 2)
+    r1 = r1_sin_normalizar / au
+
+    # Armamos la matriz ortogonal de rotación R
     R = np.array([r1, r2, r3])
 
-    # Verificamos que R sea una rotación (det(R) = +1) y no una reflexión
+    # Verificamos que R sea una rotación propia (det(R) = +1) y no una reflexión
     det_R = (R[0, 0] * (R[1, 1] * R[2, 2] - R[1, 2] * R[2, 1])
            - R[0, 1] * (R[1, 0] * R[2, 2] - R[1, 2] * R[2, 0])
            + R[0, 2] * (R[1, 0] * R[2, 1] - R[1, 1] * R[2, 0]))
@@ -206,23 +247,14 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
         p = -p
         R = -R
 
-    # Verificamos si tenemos que forzar gamma (K12) = 0
+    # Imponemos las restricciones opcionales del inciso 2d sobre los parámetros de K
     if fuerza_k12_0:
         gamma = 0.0
-    else:
-        gamma = gamma_real
 
-    # Verificamos si tenemos que forzar au = av (píxeles cuadrados)
     if fuerza_au_av_iguales:
-        au = 0.5 * (au_real + av)
-        av = au
-    else:
-        au = au_real
-
-    # Despejamos t de abajo hacia arriba usando el p y los parámetros finales de K
-    t3 = p * m34
-    t2 = (p * m24 - v0 * t3) / av
-    t1 = (p * m14 - gamma * t2 - u0 * t3) / au
+        prom = 0.5 * (au + av)
+        au = prom
+        av = prom
 
     # Armamos la matriz intrínseca K
     K = np.array([
@@ -231,8 +263,18 @@ def devolverMatricesCalibracion3d(M, fuerza_k12_0=False, fuerza_au_av_iguales=Fa
         [0.0, 0.0, 1.0]
     ])
 
-    # Armamos el vector de traslación t
+    # Despejamos el vector de traslación t resolviendo K t = p b 
+    t3 = p * m34
+    t2 = (p * m24 - v0 * t3) / av
+    t1 = (p * m14 - gamma * t2 - u0 * t3) / au
     t = np.array([t1, t2, t3])
+
+   # Si se modificó K, recalculamos R proyectando C = p * K^(-1) * A mediante SVD
+    if fuerza_k12_0 or fuerza_au_av_iguales:
+        A_escalada = p * M[:, :3]
+        C = mult_mat(inversa(K), A_escalada)
+        U, _, V = svd_reducida(C)
+        R = mult_mat(U, traspuesta(V))
 
     return R, t, K
 
